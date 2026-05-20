@@ -4,9 +4,13 @@ import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,7 +48,7 @@ import android.widget.Toast
 import androidx.hilt.navigation.compose.hiltViewModel
 import ph.nextbank.drums.data.model.DrumToken
 import ph.nextbank.drums.ui.components.DrumHitChips
-import ph.nextbank.drums.ui.components.DrumStaffStack
+import ph.nextbank.drums.ui.components.DrumStaff
 import ph.nextbank.drums.ui.components.TransportButton
 import ph.nextbank.drums.ui.components.TransportStyle
 import ph.nextbank.drums.ui.theme.DrumsColors
@@ -97,17 +101,26 @@ fun PlayerScreen(
             Text("/${song.totalBars}", color = DrumsColors.Dim, style = DrumsType.barCounter)
         }
 
-        val staffScroll = rememberScrollState()
-        val slotsPerBar = song.slotsPerBar
-        val barsPerLine = 2
-        val currentLine = (state.currentSlot / slotsPerBar).toInt() / barsPerLine
-        val density = androidx.compose.ui.platform.LocalDensity.current
-        // line height: DrumStaffStack default lineHeightDp=140 + 4dp spacing
-        val lineHeightPx = with(density) { (140 + 4).dp.toPx() }
-        LaunchedEffect(currentLine) {
-            // scroll so the current line is roughly centered/visible
-            staffScroll.animateScrollTo((currentLine * lineHeightPx).toInt())
-        }
+        // Horizontal scrolling staff: render the whole song as one wide strip,
+        // shift it leftwards as currentSlot advances. A fixed violet playhead
+        // sits at playheadXDp from the left, so the slot under the playhead is
+        // always the currently-playing slot.
+        val density = LocalDensity.current
+        val barWidthDp = 260
+        val playheadXDp = 110
+        val staffHeightDp = 200
+        val barCount = song.bars.size
+        val totalWidthDp = barWidthDp * barCount
+        val slotsTotal = barCount * song.slotsPerBar
+        // DrumStaffLayout constants used to compute the inner content offset.
+        val clefWPx = with(density) { 32.dp.toPx() }
+        val padXPx = with(density) { 12.dp.toPx() }
+        val totalWidthPx = with(density) { totalWidthDp.dp.toPx() }
+        val innerX0Px = clefWPx + padXPx
+        val innerWPx = totalWidthPx - clefWPx - 2 * padXPx
+        val pxPerSlotPx = innerWPx / slotsTotal
+        val playheadXPx = with(density) { playheadXDp.dp.toPx() }
+        val translationXPx = playheadXPx - innerX0Px - state.currentSlot * pxPerSlotPx
 
         Box(
             modifier = Modifier
@@ -116,15 +129,27 @@ fun PlayerScreen(
                 .clip(RoundedCornerShape(14.dp))
                 .background(DrumsColors.Surface)
                 .border(1.dp, DrumsColors.Line, RoundedCornerShape(14.dp))
-                .padding(top = 18.dp, bottom = 10.dp, start = 10.dp, end = 10.dp),
+                .clipToBounds(),
+            contentAlignment = Alignment.CenterStart,
         ) {
-            Box(modifier = Modifier.verticalScroll(staffScroll)) {
-                DrumStaffStack(
-                    bars = song.bars,
-                    currentSlot = state.currentSlot,
-                    timeSig = song.timeSig,
-                )
-            }
+            DrumStaff(
+                bars = song.bars,
+                currentSlot = 0f,
+                showClef = true,
+                showPlayhead = false,
+                timeSig = song.timeSig,
+                widthDp = totalWidthDp,
+                heightDp = staffHeightDp,
+                modifier = Modifier.graphicsLayer { translationX = translationXPx },
+            )
+            // Fixed playhead overlay
+            Box(
+                modifier = Modifier
+                    .offset(x = (playheadXDp - 1).dp)
+                    .fillMaxHeight()
+                    .width(2.5.dp)
+                    .background(DrumsColors.Playhead),
+            )
             Text(
                 "${song.timeSig.first}/${song.timeSig.second}",
                 color = DrumsColors.Dim, style = DrumsType.caption,
