@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import ph.nextbank.drums.ui.theme.DrumsColors
 import ph.nextbank.drums.ui.theme.DrumsType
 
@@ -29,15 +30,18 @@ fun PillTab(
         modifier = modifier
             .clip(shape)
             .background(if (active) DrumsColors.Text else Color.Transparent)
-            .then(if (!active) Modifier.border(1.dp, DrumsColors.Line, shape) else Modifier)
+            .then(if (!active) Modifier.border(1.5.dp, DrumsColors.Line, shape) else Modifier)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 22.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.Center,
     ) {
         Text(
             text = label,
             color = if (active) DrumsColors.Bg else DrumsColors.Dim,
-            style = DrumsType.body.copy(fontWeight = FontWeight.SemiBold),
+            style = DrumsType.body.copy(
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 19.sp,
+            ),
         )
     }
 }
