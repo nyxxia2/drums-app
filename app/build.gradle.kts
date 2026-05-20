@@ -61,6 +61,8 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
+    implementation(libs.youtube.player)
+
     testImplementation(libs.junit)
     testImplementation(libs.room.testing)
     androidTestImplementation(libs.androidx.test.ext.junit)

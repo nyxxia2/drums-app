@@ -16,6 +16,8 @@ data class Song(
     val coverInitials: String,           // e.g. "NV", "RU"
     val importedFrom: ImportSource,
     val lastPlayed: Instant?,
+    /** 11-char YouTube video ID, e.g. "hTWKbfoikeg". null = play with bundled samples. */
+    val youtubeVideoId: String? = null,
 ) {
     val totalBars: Int get() = bars.size
     val slotsPerBar: Int get() = bars.firstOrNull()?.size ?: 16

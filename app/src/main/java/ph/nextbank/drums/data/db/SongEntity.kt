@@ -20,6 +20,7 @@ data class SongEntity(
     val coverInitials: String,
     val importedFrom: ImportSource,
     val lastPlayedEpochMs: Long?,
+    val youtubeVideoId: String?,
 ) {
     fun toSong(): Song = Song(
         id = id,
@@ -31,6 +32,7 @@ data class SongEntity(
         coverInitials = coverInitials,
         importedFrom = importedFrom,
         lastPlayed = lastPlayedEpochMs?.let(Instant::ofEpochMilli),
+        youtubeVideoId = youtubeVideoId,
     )
 
     companion object {
@@ -45,6 +47,7 @@ data class SongEntity(
             coverInitials = s.coverInitials,
             importedFrom = s.importedFrom,
             lastPlayedEpochMs = s.lastPlayed?.toEpochMilli(),
+            youtubeVideoId = s.youtubeVideoId,
         )
 
         internal fun encodeBars(bars: List<List<List<DrumToken>>>): String =
