@@ -1,0 +1,16 @@
+<resources>
+    <color name="bg">#0a0a0c</color>
+    <color name="surface">#131318</color>
+    <color name="surface2">#1c1c24</color>
+    <color name="line">#26262e</color>
+    <color name="text">#f5f5f7</color>
+    <color name="dim">#8a8a94</color>
+    <color name="accent">#8a3dff</color>
+    <color name="accent_on">#ffffff</color>
+    <color name="staff_line">#3a3a44</color>
+    <color name="note">#f5f5f7</color>
+    <color name="playhead">#8a3dff</color>
+    <color name="bar_track">#26262e</color>
+    <color name="cover_grad_from">#8a3dff</color>
+    <color name="cover_grad_to">#7a1020</color>
+</resources>
