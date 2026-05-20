@@ -1,5 +1,8 @@
 package ph.nextbank.drums.ui.player
 
+import android.app.Activity
+import android.content.pm.ActivityInfo
+import android.content.ContextWrapper
 import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,6 +35,7 @@ import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -63,6 +67,17 @@ fun PlayerScreen(
     val state by vm.state.collectAsState()
     val song = state.song ?: return
     val ctx = LocalContext.current
+
+    // Lock the Player to landscape; restore the previous orientation on exit.
+    DisposableEffect(Unit) {
+        val activity = ctx.findActivity()
+        val prior = activity?.requestedOrientation
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        onDispose {
+            activity?.requestedOrientation =
+                prior ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
 
     LaunchedEffect(state.playing) {
         while (state.playing) {
@@ -106,9 +121,9 @@ fun PlayerScreen(
         // sits at playheadXDp from the left, so the slot under the playhead is
         // always the currently-playing slot.
         val density = LocalDensity.current
-        val barWidthDp = 260
-        val playheadXDp = 110
-        val staffHeightDp = 200
+        val barWidthDp = 380
+        val playheadXDp = 140
+        val staffHeightDp = 280
         val barCount = song.bars.size
         val totalWidthDp = barWidthDp * barCount
         val slotsTotal = barCount * song.slotsPerBar
@@ -207,6 +222,15 @@ fun PlayerScreen(
             )
         }
     }
+}
+
+private fun android.content.Context.findActivity(): Activity? {
+    var c: android.content.Context? = this
+    while (c is ContextWrapper) {
+        if (c is Activity) return c
+        c = c.baseContext
+    }
+    return null
 }
 
 @Composable

@@ -34,10 +34,10 @@ class DrumStaffLayout(
         innerX0 + (currentBeat / slotsTotal) * innerW
 
     fun yOf(token: DrumToken): Float = when (token) {
-        DrumToken.HIHAT_CLOSED -> staffTopY - 12f
-        DrumToken.HIHAT_OPEN -> staffTopY - 12f
-        DrumToken.CRASH -> staffTopY - 20f
-        DrumToken.RIDE -> staffTopY - 16f
+        DrumToken.HIHAT_CLOSED -> staffTopY - lineGap * 1.33f
+        DrumToken.HIHAT_OPEN -> staffTopY - lineGap * 1.33f
+        DrumToken.CRASH -> staffTopY - lineGap * 2.22f
+        DrumToken.RIDE -> staffTopY - lineGap * 1.78f
         DrumToken.TOM_HI -> staffLines[1] - lineGap / 2f
         DrumToken.TOM_MID -> staffLines[2] - lineGap / 2f
         DrumToken.SNARE -> staffLines[2]
@@ -46,7 +46,7 @@ class DrumStaffLayout(
     }
 
     /** Stems pointing up from top-row hits (cymbals & hi-hat) or from snare/toms without kick. */
-    fun upStems(bars: List<List<List<DrumToken>>>): List<UpStem> {
+    fun upStems(bars: List<List<List<DrumToken>>>, stemLen: Float = 22f): List<UpStem> {
         val out = mutableListOf<UpStem>()
         bars.forEachIndexed { bi, bar ->
             bar.forEachIndexed { si, slot ->
@@ -58,24 +58,24 @@ class DrumStaffLayout(
                 val hasKick = DrumToken.KICK in slot
                 if (hasTop) {
                     val topY = slot.filter { it in TOP_ROW }.minOf(::yOf)
-                    out += UpStem(x, topY, topY - 16f, bi, si)
+                    out += UpStem(x, topY, topY - stemLen * 0.73f, bi, si)
                 } else if (hasMid && !hasKick) {
                     val midY = if (DrumToken.SNARE in slot) yOf(DrumToken.SNARE)
                                else yOf(slot.first { it in MID_ROW })
-                    out += UpStem(x, midY, midY - 22f, bi, si)
+                    out += UpStem(x, midY, midY - stemLen, bi, si)
                 }
             }
         }
         return out
     }
 
-    fun downStems(bars: List<List<List<DrumToken>>>): List<DownStem> {
+    fun downStems(bars: List<List<List<DrumToken>>>, stemLen: Float = 16f): List<DownStem> {
         val out = mutableListOf<DownStem>()
         bars.forEachIndexed { bi, bar ->
             bar.forEachIndexed { si, slot ->
                 if (DrumToken.KICK !in slot) return@forEachIndexed
                 val x = slotX(bi * slotsPerBar + si)
-                out += DownStem(x, yOf(DrumToken.KICK), yOf(DrumToken.KICK) + 16f)
+                out += DownStem(x, yOf(DrumToken.KICK), yOf(DrumToken.KICK) + stemLen)
             }
         }
         return out

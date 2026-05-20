@@ -23,6 +23,8 @@ import ph.nextbank.drums.ui.theme.DrumsColors
  * percussion clef, time signature, and a violet playhead at `currentSlot`.
  *
  * Layout math lives in [DrumStaffLayout]; this Composable is the painter.
+ * Staff geometry and note size scale with `heightDp` so a 280dp staff doesn't
+ * end up with the same thin lines as a 100dp one.
  */
 @Composable
 fun DrumStaff(
@@ -38,18 +40,25 @@ fun DrumStaff(
     val density = LocalDensity.current
     val widthPx = with(density) { widthDp.dp.toPx() }
     val heightPx = with(density) { heightDp.dp.toPx() }
+    val baseHeightPx = with(density) { 140.dp.toPx() }
+    // Visual scale: 1.0 at heightDp=140 (matches the legacy DrumStaffLayout
+    // defaults), grows with bigger canvases so notes, stems, and gaps all
+    // remain proportional to the staff.
+    val s = heightPx / baseHeightPx
     val barCount = bars.size
 
-    val layout = remember(widthPx, heightPx, showClef, barCount) {
+    val layout = remember(widthPx, heightPx, showClef, barCount, s) {
         DrumStaffLayout(
             width = widthPx,
             height = heightPx,
+            top = 40f * s,
+            lineGap = 14f * s,
             showClef = showClef,
             barCount = barCount,
         )
     }
-    val upStems = remember(bars) { layout.upStems(bars) }
-    val downStems = remember(bars) { layout.downStems(bars) }
+    val upStems = remember(bars, s) { layout.upStems(bars, stemLen = 22f * s) }
+    val downStems = remember(bars, s) { layout.downStems(bars, stemLen = 16f * s) }
     val beams = remember(upStems) { layout.beamGroups(upStems) }
 
     Canvas(modifier = modifier.size(widthDp.dp, heightDp.dp)) {
@@ -64,56 +73,55 @@ fun DrumStaff(
                 color = lineCol,
                 start = Offset(layout.clefW, yy),
                 end = Offset(widthPx, yy),
-                strokeWidth = 0.9f,
+                strokeWidth = 1.0f * s,
             )
         }
 
         // percussion clef
         if (showClef) {
-            val tx = layout.clefW - 12f
+            val tx = layout.clefW - 12f * s
             drawRect(
                 color = lineCol,
                 topLeft = Offset(tx, layout.staffTopY),
-                size = androidx.compose.ui.geometry.Size(4f, layout.staffBottomY - layout.staffTopY),
+                size = androidx.compose.ui.geometry.Size(4f * s, layout.staffBottomY - layout.staffTopY),
             )
             drawRect(
                 color = lineCol,
-                topLeft = Offset(tx + 6f, layout.staffTopY),
-                size = androidx.compose.ui.geometry.Size(1.5f, layout.staffBottomY - layout.staffTopY),
+                topLeft = Offset(tx + 6f * s, layout.staffTopY),
+                size = androidx.compose.ui.geometry.Size(1.5f * s, layout.staffBottomY - layout.staffTopY),
             )
-            // Time signature is text — drawn via native canvas
             drawIntoCanvas { c ->
                 val p = android.graphics.Paint().apply {
                     color = android.graphics.Color.parseColor("#3A3A44")
                     isAntiAlias = true
-                    textSize = 17f
+                    textSize = 22f * s
                     typeface = android.graphics.Typeface.create("serif", android.graphics.Typeface.BOLD)
                 }
-                c.nativeCanvas.drawText("${timeSig.first}", layout.clefW + 2f, layout.staffTopY + 16f, p)
-                c.nativeCanvas.drawText("${timeSig.second}", layout.clefW + 2f, layout.staffBottomY - 1f, p)
+                c.nativeCanvas.drawText("${timeSig.first}", layout.clefW + 2f * s, layout.staffTopY + 20f * s, p)
+                c.nativeCanvas.drawText("${timeSig.second}", layout.clefW + 2f * s, layout.staffBottomY - 1f * s, p)
             }
         }
 
         // bar lines
         for (bi in 0..barCount) {
             val x = layout.innerX0 + bi * layout.barW
-            drawLine(lineCol, Offset(x, layout.staffTopY), Offset(x, layout.staffBottomY), 0.9f)
+            drawLine(lineCol, Offset(x, layout.staffTopY), Offset(x, layout.staffBottomY), 1.0f * s)
         }
 
         // stems
-        upStems.forEach { s ->
-            drawLine(noteCol, Offset(s.x + 4f, s.y1), Offset(s.x + 4f, s.y2), 1.1f)
+        upStems.forEach { stem ->
+            drawLine(noteCol, Offset(stem.x + 4f * s, stem.y1), Offset(stem.x + 4f * s, stem.y2), 1.4f * s)
         }
-        downStems.forEach { s ->
-            drawLine(noteCol, Offset(s.x - 4f, s.y1), Offset(s.x - 4f, s.y2), 1.1f)
+        downStems.forEach { stem ->
+            drawLine(noteCol, Offset(stem.x - 4f * s, stem.y1), Offset(stem.x - 4f * s, stem.y2), 1.4f * s)
         }
 
         // beams
         beams.forEach { group ->
-            val x1 = group.first().x + 4f
-            val x2 = group.last().x + 4f
+            val x1 = group.first().x + 4f * s
+            val x2 = group.last().x + 4f * s
             val yy = group.minOf { it.y2 }
-            drawRect(noteCol, topLeft = Offset(x1, yy), size = androidx.compose.ui.geometry.Size(x2 - x1, 2.5f))
+            drawRect(noteCol, topLeft = Offset(x1, yy), size = androidx.compose.ui.geometry.Size(x2 - x1, 3f * s))
         }
 
         // noteheads
@@ -124,10 +132,10 @@ fun DrumStaff(
                 slot.forEach { token ->
                     val cy = layout.yOf(token)
                     when (token) {
-                        DrumToken.HIHAT_CLOSED -> drawNoteX(cx, cy, noteCol)
-                        DrumToken.HIHAT_OPEN -> drawOpenHat(cx, cy, noteCol)
-                        DrumToken.CRASH, DrumToken.RIDE -> drawNoteX(cx, cy, accent)
-                        else -> drawNoteOval(cx, cy, noteCol)
+                        DrumToken.HIHAT_CLOSED -> drawNoteX(cx, cy, noteCol, s)
+                        DrumToken.HIHAT_OPEN -> drawOpenHat(cx, cy, noteCol, s)
+                        DrumToken.CRASH, DrumToken.RIDE -> drawNoteX(cx, cy, accent, s)
+                        else -> drawNoteOval(cx, cy, noteCol, s)
                     }
                 }
             }
@@ -138,34 +146,34 @@ fun DrumStaff(
             val phX = layout.playheadX(currentSlot)
             drawLine(
                 color = playheadCol,
-                start = Offset(phX, layout.staffTopY - 22f),
-                end = Offset(phX, layout.staffBottomY + 14f),
-                strokeWidth = 2.2f,
+                start = Offset(phX, layout.staffTopY - 22f * s),
+                end = Offset(phX, layout.staffBottomY + 14f * s),
+                strokeWidth = 2.8f * s,
                 cap = StrokeCap.Round,
             )
-            drawCircle(playheadCol, radius = 3f, center = Offset(phX, layout.staffTopY - 24f))
+            drawCircle(playheadCol, radius = 4f * s, center = Offset(phX, layout.staffTopY - 24f * s))
         }
     }
 }
 
-private fun DrawScope.drawNoteOval(cx: Float, cy: Float, color: Color) {
+private fun DrawScope.drawNoteOval(cx: Float, cy: Float, color: Color, s: Float) {
     rotate(degrees = -22f, pivot = Offset(cx, cy)) {
         drawOval(
             color = color,
-            topLeft = Offset(cx - 4.2f, cy - 3.1f),
-            size = androidx.compose.ui.geometry.Size(8.4f, 6.2f),
+            topLeft = Offset(cx - 5.2f * s, cy - 3.8f * s),
+            size = androidx.compose.ui.geometry.Size(10.4f * s, 7.6f * s),
         )
     }
 }
 
-private fun DrawScope.drawNoteX(cx: Float, cy: Float, color: Color) {
-    drawLine(color, Offset(cx - 4f, cy - 4f), Offset(cx + 4f, cy + 4f), 1.6f, cap = StrokeCap.Round)
-    drawLine(color, Offset(cx - 4f, cy + 4f), Offset(cx + 4f, cy - 4f), 1.6f, cap = StrokeCap.Round)
+private fun DrawScope.drawNoteX(cx: Float, cy: Float, color: Color, s: Float) {
+    drawLine(color, Offset(cx - 5f * s, cy - 5f * s), Offset(cx + 5f * s, cy + 5f * s), 2.0f * s, cap = StrokeCap.Round)
+    drawLine(color, Offset(cx - 5f * s, cy + 5f * s), Offset(cx + 5f * s, cy - 5f * s), 2.0f * s, cap = StrokeCap.Round)
 }
 
-private fun DrawScope.drawOpenHat(cx: Float, cy: Float, color: Color) {
-    drawNoteX(cx, cy, color)
-    drawCircle(color, radius = 2.8f, center = Offset(cx, cy - 8f), style = Stroke(width = 1.6f))
+private fun DrawScope.drawOpenHat(cx: Float, cy: Float, color: Color, s: Float) {
+    drawNoteX(cx, cy, color, s)
+    drawCircle(color, radius = 3.5f * s, center = Offset(cx, cy - 10f * s), style = Stroke(width = 2.0f * s))
 }
 
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true, backgroundColor = 0xFF131318)
