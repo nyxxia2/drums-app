@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import ph.nextbank.drums.data.db.AppDatabase
 import ph.nextbank.drums.data.db.SongDao
 import ph.nextbank.drums.data.repo.SongRepository
+import ph.nextbank.drums.audio.DrumSampleBank
 import ph.nextbank.drums.data.samples.SAMPLE_SONGS
 import javax.inject.Singleton
 
@@ -38,4 +39,7 @@ object AppModule {
         scope.launch { repo.upsertAll(SAMPLE_SONGS) }
         return repo
     }
+
+    @Provides @Singleton
+    fun provideDrumSampleBank(@ApplicationContext ctx: Context): DrumSampleBank = DrumSampleBank(ctx)
 }
