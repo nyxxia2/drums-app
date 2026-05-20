@@ -36,7 +36,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import android.widget.Toast
 import androidx.hilt.navigation.compose.hiltViewModel
 import ph.nextbank.drums.data.model.DrumToken
 import ph.nextbank.drums.ui.components.DrumHitChips
@@ -54,6 +56,7 @@ fun PlayerScreen(
 ) {
     val state by vm.state.collectAsState()
     val song = state.song ?: return
+    val ctx = LocalContext.current
 
     LaunchedEffect(state.playing) {
         while (state.playing) {
@@ -74,7 +77,9 @@ fun PlayerScreen(
                 Text("NOW READING", color = DrumsColors.Dim, style = DrumsType.allCapsLabel)
                 Text(song.title, color = DrumsColors.Text, style = DrumsType.cardTitle, maxLines = 1)
             }
-            IconBox(Icons.Filled.MoreVert, "More", {})
+            IconBox(Icons.Filled.MoreVert, "More") {
+                Toast.makeText(ctx, "Player options coming soon", Toast.LENGTH_SHORT).show()
+            }
         }
 
         Row(

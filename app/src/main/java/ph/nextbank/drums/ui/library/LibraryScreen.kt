@@ -37,9 +37,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.hilt.navigation.compose.hiltViewModel
+import ph.nextbank.drums.data.model.ImportSource
 import ph.nextbank.drums.data.model.Song
 import ph.nextbank.drums.ui.components.CoverArtWithMonogram
 import ph.nextbank.drums.ui.components.DrumStaff
@@ -58,7 +61,26 @@ fun LibraryScreen(
     vm: LibraryViewModel = hiltViewModel(),
 ) {
     val songs by vm.songs.collectAsState()
+    val ctx = LocalContext.current
     var tab by remember { mutableStateOf("All") }
+
+    val filtered = remember(songs, tab) {
+        when (tab) {
+            "Recent" -> songs.filter { it.lastPlayed != null }
+            "Spotify" -> songs.filter { it.importedFrom == ImportSource.SPOTIFY }
+            else -> songs
+        }
+    }
+    val sectionLabel = when (tab) {
+        "Recent" -> "RECENTLY PLAYED"
+        "Spotify" -> "FROM SPOTIFY"
+        else -> "ALL SONGS"
+    }
+    val emptyMessage = when (tab) {
+        "Recent" -> "You haven't played any songs yet."
+        "Spotify" -> "Connect Spotify to see your tracks here."
+        else -> "Tap the + button to add a song."
+    }
 
     Box(Modifier.fillMaxSize().background(DrumsColors.Bg)) {
         Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -73,9 +95,12 @@ fun LibraryScreen(
                     Modifier
                         .size(36.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .border(1.4.dp, DrumsColors.Line, RoundedCornerShape(999.dp)),
+                        .border(1.4.dp, DrumsColors.Line, RoundedCornerShape(999.dp))
+                        .clickable {
+                            Toast.makeText(ctx, "Sort & options coming soon", Toast.LENGTH_SHORT).show()
+                        },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.MoreVert, contentDescription = null, tint = DrumsColors.Text) }
+                ) { Icon(Icons.Filled.MoreVert, contentDescription = "More options", tint = DrumsColors.Text) }
             }
 
             Spacer(Modifier.height(14.dp))
@@ -90,25 +115,34 @@ fun LibraryScreen(
             Spacer(Modifier.height(14.dp))
 
             val continueSong = songs.firstOrNull()
-            if (continueSong != null) {
+            if (continueSong != null && tab == "All") {
                 ContinueCard(continueSong, onClick = { onSongClick(continueSong.id) })
                 Spacer(Modifier.height(14.dp))
             }
 
             Text(
-                "ALL SONGS",
+                sectionLabel,
                 color = DrumsColors.Dim,
                 style = DrumsType.allCapsLabel,
                 modifier = Modifier.padding(vertical = 4.dp, horizontal = 12.dp),
             )
 
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                items(songs, key = { it.id }) { song ->
-                    SongRow(
-                        song = song,
-                        onClick = { onSongClick(song.id) },
-                        onLongPress = { onSongLongPress(song.id) },
-                    )
+            if (filtered.isEmpty()) {
+                Box(
+                    Modifier.fillMaxWidth().weight(1f).padding(top = 24.dp),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    Text(emptyMessage, color = DrumsColors.Dim, style = DrumsType.body)
+                }
+            } else {
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    items(filtered, key = { it.id }) { song ->
+                        SongRow(
+                            song = song,
+                            onClick = { onSongClick(song.id) },
+                            onLongPress = { onSongLongPress(song.id) },
+                        )
+                    }
                 }
             }
         }
