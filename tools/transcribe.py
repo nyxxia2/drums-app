@@ -83,70 +83,121 @@ def detect_tempo_and_beats(y: np.ndarray, sr: int) -> tuple[float, np.ndarray]:
     return float(tempo), beat_times
 
 
-# ───────── 3. Onsets per frequency band ─────────────────────────────────
-def classify_onsets(y: np.ndarray, sr: int) -> list[tuple[float, str]]:
-    """Return list of (onset_time_sec, drum_label) where label ∈ {k, s, h}."""
-    onsets = librosa.onset.onset_detect(y=y, sr=sr, units="time", backtrack=True)
-    if len(onsets) == 0:
-        return []
+# ───────── 3. Onsets per frequency band (multi-label) ──────────────────
+def detect_hits(y: np.ndarray, sr: int) -> list[tuple[float, str]]:
+    """Per-band onset detection. A single moment in time can emit multiple
+    drum labels (e.g. kick + hi-hat hitting together).
 
-    # STFT once; sample each onset's spectrum.
-    n_fft = 2048
+    Returns a sorted list of (time_sec, label) with label ∈ {k, s, h}.
+    """
     hop = 512
-    S = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop))
-    freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
-    low = freqs < 200                         # kick band
-    mid = (freqs >= 200) & (freqs < 1200)     # snare body
-    high = freqs >= 5000                      # hi-hat / cymbal
+
+    # HPSS: separate the percussive component from the harmonic one (vocals,
+    # bass, guitar). Onset detection on y_p alone reduces false kick detections
+    # from sustained bass-guitar notes and tonal guitar strums leaking into
+    # the lower bands.
+    y_h, y_p = librosa.effects.hpss(y, margin=2.0)
+
+    # librosa.onset.onset_strength_multi gives one onset-strength envelope per
+    # mel-band group. Using 64 mel bands at 22.05 kHz:
+    #   slice(0, 6)   ≈   0 –  250 Hz  → kick
+    #   slice(10, 40) ≈ 350 –  2.5 kHz → snare body
+    #   slice(42, 64) ≈   3 – 11   kHz → hi-hat / cymbals
+    onset_envs = librosa.onset.onset_strength_multi(
+        y=y_p,
+        sr=sr,
+        hop_length=hop,
+        n_mels=64,
+        channels=[slice(0, 6), slice(10, 40), slice(42, 64)],
+    )
+
+    # Per-band peak-pick parameters tuned for typical rock/pop drum density.
+    # delta = required prominence above local mean; bigger = fewer false peaks.
+    # wait = min frames between two detected peaks in the same band.
+    BAND_PARAMS = [
+        # (label, pre_max, post_max, pre_avg, post_avg, delta, wait_frames)
+        ("k", 5, 5, 15, 15, 0.50, 10),  # ~2-4 hits/s
+        ("s", 5, 5, 15, 15, 0.65, 10),  # ~2/bar typical, don't double-fire
+        ("h", 3, 3,  5,  5, 0.22,  3),  # every 8th or 16th — lower delta
+    ]
+
+    band_hits: list[list[tuple[float, float]]] = []  # per-band [(time, strength), ...]
+    for i, (label, pre_max, post_max, pre_avg, post_avg, delta, wait) in enumerate(BAND_PARAMS):
+        peaks = librosa.util.peak_pick(
+            onset_envs[i],
+            pre_max=pre_max,
+            post_max=post_max,
+            pre_avg=pre_avg,
+            post_avg=post_avg,
+            delta=delta,
+            wait=wait,
+        )
+        times = librosa.frames_to_time(peaks, sr=sr, hop_length=hop)
+        strengths = onset_envs[i][peaks]
+        band_hits.append([(float(t), float(s)) for t, s in zip(times, strengths)])
+
+    # Suppress weak bystander detections: if a kick and a snare fire within
+    # 30ms of each other, the broadband transient of one drum often triggers
+    # the other's band. Keep only the band whose detection is significantly
+    # stronger (≥ 1.3× the other's mean strength).
+    K_HITS = band_hits[0]
+    S_HITS = band_hits[1]
+    H_HITS = band_hits[2]
+    TOL = 0.030  # 30 ms
+
+    def suppress(a: list[tuple[float, float]], b: list[tuple[float, float]]) -> list[tuple[float, float]]:
+        """Remove peaks in `a` that have a stronger neighbour in `b` within TOL."""
+        if not b:
+            return a
+        b_arr = np.array([(t, s) for t, s in b])
+        out = []
+        for t, s in a:
+            mask = np.abs(b_arr[:, 0] - t) <= TOL
+            if mask.any():
+                neighbour_max = float(b_arr[mask, 1].max())
+                if neighbour_max > 1.3 * s:
+                    continue   # this peak is the bystander
+            out.append((t, s))
+        return out
+
+    K_HITS = suppress(K_HITS, S_HITS)        # weak kicks shadowed by snare
+    S_HITS = suppress(S_HITS, band_hits[0])  # weak snares shadowed by kick
+    # Don't suppress hi-hats — they legitimately ride on top of k/s.
 
     hits: list[tuple[float, str]] = []
-    for t in onsets:
-        frame = int(round(t * sr / hop))
-        if frame >= S.shape[1]:
-            continue
-        # Average a few frames around the onset for stability.
-        window = S[:, max(0, frame - 1):frame + 3]
-        if window.size == 0:
-            continue
-        spec = window.mean(axis=1)
-        e_low = spec[low].sum()
-        e_mid = spec[mid].sum()
-        e_high = spec[high].sum()
-        total = e_low + e_mid + e_high + 1e-9
-        ratio_low = e_low / total
-        ratio_high = e_high / total
-        # Heuristic order: very-low-heavy → kick. Lots of HF → hihat. Else snare.
-        if ratio_low > 0.45:
-            label = "k"
-        elif ratio_high > 0.50:
-            label = "h"
-        else:
-            label = "s"
-        hits.append((float(t), label))
+    for t, _ in K_HITS: hits.append((t, "k"))
+    for t, _ in S_HITS: hits.append((t, "s"))
+    for t, _ in H_HITS: hits.append((t, "h"))
+    hits.sort()
     return hits
 
 
 # ───────── 4. Pick a stable N-bar window ───────────────────────────────
-def pick_window(beat_times: np.ndarray, y: np.ndarray, sr: int, bars: int) -> tuple[float, float]:
-    """Return (start_sec, end_sec) of an N-bar window from a loud part of the song."""
+def pick_window(
+    beat_times: np.ndarray,
+    hits: list[tuple[float, str]],
+    bars: int,
+) -> tuple[float, float]:
+    """Return (start_sec, end_sec) of the N-bar window with the most drum
+    activity. Picks by raw onset count rather than RMS, so we land on a
+    section where the drum pattern is actually playing (not just a loud
+    guitar/vocal moment with no drums).
+    """
     beats_per_bar = 4
     if len(beat_times) < bars * beats_per_bar + 1:
         return float(beat_times[0]), float(beat_times[-1])
 
-    # Find loudest beat-aligned region of bars*4 consecutive beats.
-    rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=512)[0]
-    rms_t = librosa.times_like(rms, sr=sr, hop_length=512)
+    hit_times = np.array([t for t, _ in hits])
+    window_beats = bars * beats_per_bar
 
     best_i = 0
-    best_e = -1.0
-    window_beats = bars * beats_per_bar
+    best_count = -1
     for i in range(len(beat_times) - window_beats):
         t0 = beat_times[i]
         t1 = beat_times[i + window_beats]
-        mask = (rms_t >= t0) & (rms_t < t1)
-        e = float(rms[mask].mean()) if mask.any() else 0.0
-        if e > best_e:
-            best_e = e
+        count = int(((hit_times >= t0) & (hit_times < t1)).sum())
+        if count > best_count:
+            best_count = count
             best_i = i
     return float(beat_times[best_i]), float(beat_times[best_i + window_beats])
 
@@ -257,14 +308,14 @@ def main() -> int:
         bpm = int(round(tempo))
         print(f"      tempo ≈ {bpm} BPM, {len(beat_times)} beats", file=sys.stderr)
 
-        print("[4/5] Onsets + per-band classification ...", file=sys.stderr)
-        hits = classify_onsets(y, sr)
+        print("[4/5] Per-band onset detection (k / s / h) ...", file=sys.stderr)
+        hits = detect_hits(y, sr)
         print(f"      {len(hits)} hits detected ({sum(1 for _, l in hits if l == 'k')} k, "
               f"{sum(1 for _, l in hits if l == 's')} s, "
               f"{sum(1 for _, l in hits if l == 'h')} h)", file=sys.stderr)
 
-        print(f"[5/5] Picking loudest {args.bars}-bar window + quantising ...", file=sys.stderr)
-        w_start, w_end = pick_window(beat_times, y, sr, args.bars)
+        print(f"[5/5] Picking densest {args.bars}-bar window + quantising ...", file=sys.stderr)
+        w_start, w_end = pick_window(beat_times, hits, args.bars)
         print(f"      window: {w_start:.1f}s → {w_end:.1f}s", file=sys.stderr)
         grid = quantise_to_grid(hits, w_start, w_end, tempo, args.bars)
 
