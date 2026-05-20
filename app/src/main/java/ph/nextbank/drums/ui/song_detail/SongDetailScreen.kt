@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -53,7 +54,7 @@ fun SongDetailScreen(
     val song = state.song ?: return
 
     Column(
-        Modifier.fillMaxSize().background(DrumsColors.Bg).verticalScroll(rememberScrollState()),
+        Modifier.fillMaxSize().background(DrumsColors.Bg).safeDrawingPadding().verticalScroll(rememberScrollState()),
     ) {
         Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
             Canvas(modifier = Modifier.fillMaxSize()) {

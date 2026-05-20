@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -43,7 +44,7 @@ fun PracticeScreen(songId: String, onBack: () -> Unit, vm: PracticeViewModel = h
     val song = state.song ?: return
 
     Column(
-        Modifier.fillMaxSize().background(DrumsColors.Bg).padding(16.dp),
+        Modifier.fillMaxSize().background(DrumsColors.Bg).safeDrawingPadding().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
