@@ -3,7 +3,6 @@ package ph.nextbank.drums.ui.player
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.content.ContextWrapper
-import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -204,7 +203,7 @@ fun PlayerScreen(
             TransportButton(
                 icon = rememberVectorPainter(if (state.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow),
                 contentDescription = if (state.playing) "Pause" else "Play",
-                onClick = { vm.togglePlay(SystemClock.elapsedRealtime()) },
+                onClick = { vm.togglePlay(System.nanoTime() / 1_000_000L) },
                 style = TransportStyle.PRIMARY,
                 sizeDp = 64.dp,
             )
