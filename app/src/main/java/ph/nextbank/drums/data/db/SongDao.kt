@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface SongDao {
-    @Query("SELECT * FROM songs ORDER BY lastPlayedEpochMs DESC NULLS LAST, title ASC")
+    @Query("SELECT * FROM songs ORDER BY (lastPlayedEpochMs IS NULL) ASC, lastPlayedEpochMs DESC, title ASC")
     fun observeAll(): Flow<List<SongEntity>>
 
     @Query("SELECT * FROM songs WHERE id = :id")

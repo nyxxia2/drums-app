@@ -6,60 +6,60 @@ import ph.nextbank.drums.data.model.ImportSource
 import ph.nextbank.drums.data.model.Song
 
 // ─── primitive helpers ─────────────────────────────────────────
-private val __: List<DrumToken> = emptyList()
+private val e: List<DrumToken> = emptyList()
 private fun hit(vararg t: DrumToken): List<DrumToken> = t.toList()
 
 // ─── canonical bars (from drum-staff.jsx) ──────────────────────
 private val GROOVE_A = listOf(
-    hit(KICK, HIHAT_CLOSED), __, hit(HIHAT_CLOSED), __,
-    hit(SNARE, HIHAT_CLOSED), __, hit(HIHAT_CLOSED), __,
-    hit(KICK, HIHAT_CLOSED), __, hit(KICK, HIHAT_CLOSED), __,
-    hit(SNARE, HIHAT_CLOSED), __, hit(HIHAT_CLOSED), __,
+    hit(KICK, HIHAT_CLOSED), e, hit(HIHAT_CLOSED), e,
+    hit(SNARE, HIHAT_CLOSED), e, hit(HIHAT_CLOSED), e,
+    hit(KICK, HIHAT_CLOSED), e, hit(KICK, HIHAT_CLOSED), e,
+    hit(SNARE, HIHAT_CLOSED), e, hit(HIHAT_CLOSED), e,
 )
 
 private val GROOVE_B = listOf(
-    hit(KICK, HIHAT_CLOSED), __, hit(HIHAT_CLOSED), __,
-    hit(SNARE, HIHAT_CLOSED), __, hit(HIHAT_CLOSED), __,
-    hit(KICK, HIHAT_CLOSED), __, hit(HIHAT_CLOSED), __,
-    hit(SNARE, HIHAT_CLOSED), __, hit(SNARE, HIHAT_CLOSED), __,
+    hit(KICK, HIHAT_CLOSED), e, hit(HIHAT_CLOSED), e,
+    hit(SNARE, HIHAT_CLOSED), e, hit(HIHAT_CLOSED), e,
+    hit(KICK, HIHAT_CLOSED), e, hit(HIHAT_CLOSED), e,
+    hit(SNARE, HIHAT_CLOSED), e, hit(SNARE, HIHAT_CLOSED), e,
 )
 
 private val FILL = listOf(
-    hit(KICK, HIHAT_CLOSED), __, hit(HIHAT_CLOSED), __,
-    hit(SNARE, HIHAT_CLOSED), __, hit(HIHAT_CLOSED), __,
+    hit(KICK, HIHAT_CLOSED), e, hit(HIHAT_CLOSED), e,
+    hit(SNARE, HIHAT_CLOSED), e, hit(HIHAT_CLOSED), e,
     hit(SNARE), hit(SNARE), hit(TOM_HI), hit(TOM_HI),
     hit(TOM_MID), hit(TOM_MID), hit(TOM_FLOOR), hit(TOM_FLOOR),
 )
 
-private val CRASH = listOf(
-    hit(KICK, CRASH), __, hit(HIHAT_CLOSED), __,
-    hit(SNARE, HIHAT_CLOSED), __, hit(HIHAT_CLOSED), __,
-    hit(KICK, HIHAT_CLOSED), __, hit(KICK, HIHAT_CLOSED), __,
-    hit(SNARE, HIHAT_CLOSED), __, hit(HIHAT_CLOSED), __,
+private val BAR_CRASH = listOf(
+    hit(KICK, CRASH), e, hit(HIHAT_CLOSED), e,
+    hit(SNARE, HIHAT_CLOSED), e, hit(HIHAT_CLOSED), e,
+    hit(KICK, HIHAT_CLOSED), e, hit(KICK, HIHAT_CLOSED), e,
+    hit(SNARE, HIHAT_CLOSED), e, hit(HIHAT_CLOSED), e,
 )
 
 // Slower, ride-heavy groove for Tom Sawyer feel
 private val RIDE_GROOVE = listOf(
-    hit(KICK, RIDE), __, hit(RIDE), __,
-    hit(SNARE, RIDE), __, hit(RIDE), __,
-    hit(KICK, RIDE), __, hit(KICK, RIDE), __,
-    hit(SNARE, RIDE), __, hit(RIDE), __,
+    hit(KICK, RIDE), e, hit(RIDE), e,
+    hit(SNARE, RIDE), e, hit(RIDE), e,
+    hit(KICK, RIDE), e, hit(KICK, RIDE), e,
+    hit(SNARE, RIDE), e, hit(RIDE), e,
 )
 
 // Half-time feel for In the Air Tonight
 private val HALF_TIME = listOf(
-    hit(KICK, HIHAT_CLOSED), __, __, __,
-    __, __, hit(HIHAT_CLOSED), __,
-    __, __, hit(SNARE), __,
-    __, __, hit(HIHAT_CLOSED), __,
+    hit(KICK, HIHAT_CLOSED), e, e, e,
+    e, e, hit(HIHAT_CLOSED), e,
+    e, e, hit(SNARE), e,
+    e, e, hit(HIHAT_CLOSED), e,
 )
 
 // Eighth-note open hihat groove for Rosanna feel
 private val ROSANNA_FEEL = listOf(
-    hit(KICK, HIHAT_CLOSED), __, hit(HIHAT_OPEN), __,
-    hit(SNARE, HIHAT_CLOSED), __, hit(HIHAT_CLOSED), __,
-    hit(HIHAT_CLOSED), __, hit(KICK, HIHAT_OPEN), __,
-    hit(SNARE, HIHAT_CLOSED), __, hit(HIHAT_CLOSED), __,
+    hit(KICK, HIHAT_CLOSED), e, hit(HIHAT_OPEN), e,
+    hit(SNARE, HIHAT_CLOSED), e, hit(HIHAT_CLOSED), e,
+    hit(HIHAT_CLOSED), e, hit(KICK, HIHAT_OPEN), e,
+    hit(SNARE, HIHAT_CLOSED), e, hit(HIHAT_CLOSED), e,
 )
 
 // ─── songs ────────────────────────────────────────────────────
@@ -70,7 +70,7 @@ val SAMPLE_SONGS: List<Song> = listOf(
         artist = "Nirvana",
         bpm = 116,
         timeSig = 4 to 4,
-        bars = listOf(CRASH, GROOVE_A, GROOVE_B, FILL, CRASH, GROOVE_A, GROOVE_B, FILL),
+        bars = listOf(BAR_CRASH, GROOVE_A, GROOVE_B, FILL, BAR_CRASH, GROOVE_A, GROOVE_B, FILL),
         coverInitials = "NV",
         importedFrom = ImportSource.BUNDLED,
         lastPlayed = null,
@@ -81,7 +81,7 @@ val SAMPLE_SONGS: List<Song> = listOf(
         artist = "Rush",
         bpm = 88,
         timeSig = 4 to 4,
-        bars = listOf(CRASH, RIDE_GROOVE, RIDE_GROOVE, FILL, CRASH, RIDE_GROOVE, RIDE_GROOVE, FILL),
+        bars = listOf(BAR_CRASH, RIDE_GROOVE, RIDE_GROOVE, FILL, BAR_CRASH, RIDE_GROOVE, RIDE_GROOVE, FILL),
         coverInitials = "RU",
         importedFrom = ImportSource.BUNDLED,
         lastPlayed = null,
@@ -92,7 +92,7 @@ val SAMPLE_SONGS: List<Song> = listOf(
         artist = "Toto",
         bpm = 86,
         timeSig = 4 to 4,
-        bars = listOf(CRASH, ROSANNA_FEEL, ROSANNA_FEEL, FILL, CRASH, ROSANNA_FEEL, ROSANNA_FEEL, FILL),
+        bars = listOf(BAR_CRASH, ROSANNA_FEEL, ROSANNA_FEEL, FILL, BAR_CRASH, ROSANNA_FEEL, ROSANNA_FEEL, FILL),
         coverInitials = "TO",
         importedFrom = ImportSource.BUNDLED,
         lastPlayed = null,
@@ -103,7 +103,7 @@ val SAMPLE_SONGS: List<Song> = listOf(
         artist = "Phil Collins",
         bpm = 95,
         timeSig = 4 to 4,
-        bars = listOf(HALF_TIME, HALF_TIME, HALF_TIME, HALF_TIME, HALF_TIME, FILL, CRASH, HALF_TIME),
+        bars = listOf(HALF_TIME, HALF_TIME, HALF_TIME, HALF_TIME, HALF_TIME, FILL, BAR_CRASH, HALF_TIME),
         coverInitials = "PC",
         importedFrom = ImportSource.BUNDLED,
         lastPlayed = null,
@@ -114,7 +114,7 @@ val SAMPLE_SONGS: List<Song> = listOf(
         artist = "Rush",
         bpm = 144,
         timeSig = 4 to 4,
-        bars = listOf(CRASH, GROOVE_A, FILL, GROOVE_B, CRASH, GROOVE_A, FILL, GROOVE_B),
+        bars = listOf(BAR_CRASH, GROOVE_A, FILL, GROOVE_B, BAR_CRASH, GROOVE_A, FILL, GROOVE_B),
         coverInitials = "RU",
         importedFrom = ImportSource.BUNDLED,
         lastPlayed = null,

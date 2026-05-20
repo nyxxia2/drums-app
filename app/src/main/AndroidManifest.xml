@@ -2,8 +2,8 @@
     <application
         android:name=".DrumsApplication"
         android:label="@string/app_name"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:icon="@drawable/ic_launcher"
+        android:roundIcon="@drawable/ic_launcher"
         android:theme="@style/Theme.Drums"
         android:allowBackup="false">
         <activity
