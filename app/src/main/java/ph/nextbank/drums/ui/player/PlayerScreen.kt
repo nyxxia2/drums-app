@@ -4,6 +4,8 @@ import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -95,6 +97,18 @@ fun PlayerScreen(
             Text("/${song.totalBars}", color = DrumsColors.Dim, style = DrumsType.barCounter)
         }
 
+        val staffScroll = rememberScrollState()
+        val slotsPerBar = song.slotsPerBar
+        val barsPerLine = 2
+        val currentLine = (state.currentSlot / slotsPerBar).toInt() / barsPerLine
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        // line height: DrumStaffStack default lineHeightDp=140 + 4dp spacing
+        val lineHeightPx = with(density) { (140 + 4).dp.toPx() }
+        LaunchedEffect(currentLine) {
+            // scroll so the current line is roughly centered/visible
+            staffScroll.animateScrollTo((currentLine * lineHeightPx).toInt())
+        }
+
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -104,11 +118,13 @@ fun PlayerScreen(
                 .border(1.dp, DrumsColors.Line, RoundedCornerShape(14.dp))
                 .padding(top = 18.dp, bottom = 10.dp, start = 10.dp, end = 10.dp),
         ) {
-            DrumStaffStack(
-                bars = song.bars,
-                currentSlot = state.currentSlot,
-                timeSig = song.timeSig,
-            )
+            Box(modifier = Modifier.verticalScroll(staffScroll)) {
+                DrumStaffStack(
+                    bars = song.bars,
+                    currentSlot = state.currentSlot,
+                    timeSig = song.timeSig,
+                )
+            }
             Text(
                 "${song.timeSig.first}/${song.timeSig.second}",
                 color = DrumsColors.Dim, style = DrumsType.caption,

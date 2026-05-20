@@ -32,7 +32,7 @@ fun DrumStaff(
     showPlayhead: Boolean = true,
     timeSig: Pair<Int, Int> = 4 to 4,
     widthDp: Int = 320,
-    heightDp: Int = 100,
+    heightDp: Int = 140,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current

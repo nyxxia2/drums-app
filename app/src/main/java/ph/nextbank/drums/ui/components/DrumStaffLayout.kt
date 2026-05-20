@@ -8,8 +8,8 @@ data class DownStem(val x: Float, val y1: Float, val y2: Float)
 class DrumStaffLayout(
     val width: Float,
     val height: Float,
-    val top: Float = 28f,
-    val lineGap: Float = 9f,
+    val top: Float = 40f,
+    val lineGap: Float = 14f,
     val showClef: Boolean,
     val staffPaddingX: Float = 12f,
     val barCount: Int,

@@ -24,7 +24,7 @@ fun DrumStaffStack(
     timeSig: Pair<Int, Int> = 4 to 4,
     barsPerLine: Int = 2,
     widthDp: Int = 340,
-    lineHeightDp: Int = 96,
+    lineHeightDp: Int = 140,
     modifier: Modifier = Modifier,
 ) {
     val slotsPerBar = bars.firstOrNull()?.size ?: 16
