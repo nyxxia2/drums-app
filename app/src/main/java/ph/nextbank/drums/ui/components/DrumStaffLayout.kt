@@ -1,0 +1,114 @@
+package ph.nextbank.drums.ui.components
+
+import ph.nextbank.drums.data.model.DrumToken
+
+data class UpStem(val x: Float, val y1: Float, val y2: Float, val barIndex: Int, val slotIndex: Int)
+data class DownStem(val x: Float, val y1: Float, val y2: Float)
+
+class DrumStaffLayout(
+    val width: Float,
+    val height: Float,
+    val top: Float = 28f,
+    val lineGap: Float = 9f,
+    val showClef: Boolean,
+    val staffPaddingX: Float = 12f,
+    val barCount: Int,
+    val slotsPerBar: Int = 16,
+    val slotsPerBeat: Int = 4,
+) {
+    val clefW: Float = if (showClef) 32f else 0f
+    val innerX0: Float = clefW + staffPaddingX
+    val innerX1: Float = width - staffPaddingX
+    val innerW: Float = innerX1 - innerX0
+    val slotsTotal: Int = slotsPerBar * barCount
+    val slotW: Float = innerW / slotsTotal
+    val barW: Float = slotW * slotsPerBar
+
+    val staffLines: List<Float> = (0..4).map { top + it * lineGap }
+    val staffTopY: Float = staffLines.first()
+    val staffBottomY: Float = staffLines.last()
+
+    fun slotX(globalSlot: Int): Float = innerX0 + (globalSlot + 0.5f) * slotW
+
+    fun playheadX(currentBeat: Float): Float =
+        innerX0 + (currentBeat / slotsTotal) * innerW
+
+    fun yOf(token: DrumToken): Float = when (token) {
+        DrumToken.HIHAT_CLOSED -> staffTopY - 12f
+        DrumToken.HIHAT_OPEN -> staffTopY - 12f
+        DrumToken.CRASH -> staffTopY - 20f
+        DrumToken.RIDE -> staffTopY - 16f
+        DrumToken.TOM_HI -> staffLines[1] - lineGap / 2f
+        DrumToken.TOM_MID -> staffLines[2] - lineGap / 2f
+        DrumToken.SNARE -> staffLines[2]
+        DrumToken.TOM_FLOOR -> staffLines[3] + lineGap / 2f
+        DrumToken.KICK -> staffLines[4] + lineGap
+    }
+
+    /** Stems pointing up from top-row hits (cymbals & hi-hat) or from snare/toms without kick. */
+    fun upStems(bars: List<List<List<DrumToken>>>): List<UpStem> {
+        val out = mutableListOf<UpStem>()
+        bars.forEachIndexed { bi, bar ->
+            bar.forEachIndexed { si, slot ->
+                if (slot.isEmpty()) return@forEachIndexed
+                val globalSlot = bi * slotsPerBar + si
+                val x = slotX(globalSlot)
+                val hasTop = slot.any { it in TOP_ROW }
+                val hasMid = slot.any { it in MID_ROW }
+                val hasKick = DrumToken.KICK in slot
+                if (hasTop) {
+                    val topY = slot.filter { it in TOP_ROW }.minOf(::yOf)
+                    out += UpStem(x, topY, topY - 16f, bi, si)
+                } else if (hasMid && !hasKick) {
+                    val midY = if (DrumToken.SNARE in slot) yOf(DrumToken.SNARE)
+                               else yOf(slot.first { it in MID_ROW })
+                    out += UpStem(x, midY, midY - 22f, bi, si)
+                }
+            }
+        }
+        return out
+    }
+
+    fun downStems(bars: List<List<List<DrumToken>>>): List<DownStem> {
+        val out = mutableListOf<DownStem>()
+        bars.forEachIndexed { bi, bar ->
+            bar.forEachIndexed { si, slot ->
+                if (DrumToken.KICK !in slot) return@forEachIndexed
+                val x = slotX(bi * slotsPerBar + si)
+                out += DownStem(x, yOf(DrumToken.KICK), yOf(DrumToken.KICK) + 16f)
+            }
+        }
+        return out
+    }
+
+    /** Adjacent up-stems within the same beat (group of 4 slots) get beamed. */
+    fun beamGroups(stems: List<UpStem>): List<List<UpStem>> {
+        val groups = mutableListOf<List<UpStem>>()
+        var current = mutableListOf<UpStem>()
+        stems.forEach { s ->
+            if (current.isEmpty()) current += s
+            else {
+                val last = current.last()
+                val sameBar = s.barIndex == last.barIndex
+                val sameBeat = last.slotIndex / slotsPerBeat == s.slotIndex / slotsPerBeat
+                val adjacent = s.slotIndex - last.slotIndex <= 2
+                if (sameBar && sameBeat && adjacent) current += s
+                else {
+                    if (current.size > 1) groups += current.toList()
+                    current = mutableListOf(s)
+                }
+            }
+        }
+        if (current.size > 1) groups += current.toList()
+        return groups
+    }
+
+    companion object {
+        private val TOP_ROW = setOf(
+            DrumToken.HIHAT_CLOSED, DrumToken.HIHAT_OPEN, DrumToken.CRASH, DrumToken.RIDE
+        )
+        private val MID_ROW = setOf(
+            DrumToken.SNARE, DrumToken.TOM_HI, DrumToken.TOM_MID, DrumToken.TOM_FLOOR
+        )
+    }
+}
