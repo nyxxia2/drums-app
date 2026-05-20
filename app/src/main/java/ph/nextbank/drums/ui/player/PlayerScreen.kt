@@ -210,8 +210,9 @@ fun PlayerScreen(
             )
             TransportButton(
                 icon = rememberVectorPainter(Icons.Outlined.Loop),
-                contentDescription = "Loop",
-                onClick = {},
+                contentDescription = if (state.looping) "Stop looping" else "Loop song",
+                onClick = vm::toggleLoop,
+                style = if (state.looping) TransportStyle.PRIMARY else TransportStyle.GHOST,
                 sizeDp = 42.dp,
             )
             TransportButton(

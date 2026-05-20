@@ -17,27 +17,54 @@ class SongClock(
     @Volatile var isPlaying: Boolean = false
         private set
 
+    /** When false (default), playback stops at the end of the song; when true, it wraps. */
+    @Volatile var looping: Boolean = false
+
     /** Time (nowMs) at which the most-recent play() started. */
     private var playStartMs: Long = 0
     /** Slot value at the moment of the most-recent play(). */
     private var slotAtPlayStart: Float = 0f
     /** Slot value frozen during pause. */
     private var pausedSlot: Float = 0f
-    /** Last integer slot that we reported as "entered". */
-    private var lastReportedSlot: Int = -1
+    /** Last raw (un-wrapped) integer slot that we reported as "entered" (-1 means "none yet"). */
+    private var lastReportedRawSlot: Int = -1
 
     private val msPerSlot: Float get() = (60_000f / bpmProvider()) / slotsPerBeat
 
+    /** Raw, un-wrapped slot position since play started — used internally to detect end. */
+    private fun rawSlot(nowMs: Long): Float {
+        val elapsed = nowMs - playStartMs
+        return slotAtPlayStart + (elapsed.toFloat() / msPerSlot)
+    }
+
     fun currentSlot(nowMs: Long): Float {
         if (!isPlaying) return pausedSlot
-        val elapsed = nowMs - playStartMs
-        val raw = slotAtPlayStart + (elapsed.toFloat() / msPerSlot)
-        // Wrap inside [0, totalSlots)
-        return ((raw % totalSlots) + totalSlots) % totalSlots
+        val raw = rawSlot(nowMs)
+        return if (looping) {
+            ((raw % totalSlots) + totalSlots) % totalSlots
+        } else {
+            // Clamp to [0, totalSlots) so currentSlot.toInt() is always a valid slot.
+            raw.coerceIn(0f, totalSlots.toFloat() - 0.001f)
+        }
+    }
+
+    /**
+     * True when, with looping=false, playback has reached the end of the song.
+     * The PlayerViewModel polls this each frame and pauses so we get a clean
+     * stop instead of a jarring wrap-around.
+     */
+    fun isFinished(nowMs: Long): Boolean {
+        if (looping || !isPlaying) return false
+        return rawSlot(nowMs) >= totalSlots.toFloat()
     }
 
     fun play(nowMs: Long) {
         if (isPlaying) return
+        // If we'd stopped at the end, rewind to 0 on next play.
+        if (!looping && pausedSlot >= totalSlots - 1f) {
+            pausedSlot = 0f
+            lastReportedRawSlot = -1
+        }
         slotAtPlayStart = pausedSlot
         playStartMs = nowMs
         isPlaying = true
@@ -53,25 +80,40 @@ class SongClock(
         isPlaying = false
         pausedSlot = 0f
         slotAtPlayStart = 0f
-        lastReportedSlot = -1
+        lastReportedRawSlot = -1
     }
 
     /**
-     * Returns the integer slot that was just entered between the previous poll
-     * and this one, or null if no integer-slot boundary was crossed.
-     * Audio scheduling polls this each frame to fire drum hits.
+     * Returns every integer slot crossed since the previous call, in order.
+     * Audio scheduling iterates this each frame to fire drum hits — using a
+     * list (rather than just the latest slot) means a jittery frame that
+     * spans multiple slots won't silently drop the ones in the middle.
+     *
+     * Returns empty list when we haven't crossed any new slot boundary or
+     * when the clock isn't playing.
      */
-    fun slotJustEntered(nowMs: Long): Int? {
-        val nowSlot = currentSlot(nowMs).toInt()
-        if (nowSlot != lastReportedSlot) {
-            lastReportedSlot = nowSlot
-            return nowSlot
+    fun slotsJustEntered(nowMs: Long): List<Int> {
+        if (!isPlaying) return emptyList()
+        // Track raw (un-wrapped) slot so we can detect full-cycle wraps
+        // and any number of skipped slots between frames.
+        val nowRaw = rawSlot(nowMs).toInt()
+        if (nowRaw == lastReportedRawSlot) return emptyList()
+        val out = mutableListOf<Int>()
+        for (raw in (lastReportedRawSlot + 1)..nowRaw) {
+            if (raw < 0) continue
+            val mapped = if (looping) {
+                ((raw % totalSlots) + totalSlots) % totalSlots
+            } else {
+                raw
+            }
+            if (mapped in 0 until totalSlots) out += mapped
         }
-        return null
+        lastReportedRawSlot = nowRaw
+        return out
     }
 
-    /** Force the next `slotJustEntered` call to fire for the current slot. */
+    /** Force the next slots-entered call to fire for the current slot. */
     fun resetSlotTracking() {
-        lastReportedSlot = -1
+        lastReportedRawSlot = -1
     }
 }

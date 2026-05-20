@@ -19,6 +19,7 @@ data class PlayerUiState(
     val playing: Boolean = false,
     val currentSlot: Float = 0f,
     val metronomeOn: Boolean = false,
+    val looping: Boolean = false,
 )
 
 @HiltViewModel
@@ -41,7 +42,7 @@ class PlayerViewModel @Inject constructor(
             clock = SongClock(
                 bpmProvider = { _state.value.song?.bpm ?: s.bpm },
                 totalSlots = s.totalBars * s.slotsPerBar,
-            )
+            ).also { it.looping = _state.value.looping }
             _state.value = _state.value.copy(song = s)
         }
     }
@@ -59,9 +60,19 @@ class PlayerViewModel @Inject constructor(
 
     fun onFrame(nowMs: Long) {
         val c = clock ?: return
-        _state.value = _state.value.copy(currentSlot = c.currentSlot(nowMs))
-        c.slotJustEntered(nowMs)?.let { idx ->
-            val s = _state.value.song ?: return
+        // Detect a clean end-of-song first so the visual playhead doesn't snap
+        // back to bar 1 on the same frame the audio scheduler tries to wrap.
+        if (c.isFinished(nowMs)) {
+            c.pause(nowMs)
+            _state.value = _state.value.copy(playing = false)
+            return
+        }
+        val cur = c.currentSlot(nowMs)
+        _state.value = _state.value.copy(currentSlot = cur)
+        // Fire every slot crossed since last frame, not just the latest one —
+        // a jittery frame at fast tempo could otherwise drop drum hits.
+        val s = _state.value.song ?: return
+        c.slotsJustEntered(nowMs).forEach { idx ->
             val barIdx = idx / s.slotsPerBar
             val slotIdx = idx % s.slotsPerBar
             s.bars.getOrNull(barIdx)?.get(slotIdx)?.forEach(bank::play)
@@ -70,5 +81,12 @@ class PlayerViewModel @Inject constructor(
 
     fun toggleMetronome() {
         _state.value = _state.value.copy(metronomeOn = !_state.value.metronomeOn)
+    }
+
+    fun toggleLoop() {
+        val c = clock ?: return
+        val newLoop = !_state.value.looping
+        c.looping = newLoop
+        _state.value = _state.value.copy(looping = newLoop)
     }
 }
