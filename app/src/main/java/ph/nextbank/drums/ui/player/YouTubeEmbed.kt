@@ -1,5 +1,6 @@
 package ph.nextbank.drums.ui.player
 
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -12,6 +13,8 @@ import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTube
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants
 import ph.nextbank.drums.audio.playback.YouTubeAdapter
 import ph.nextbank.drums.audio.playback.YouTubeAdapterListener
+
+private const val TAG = "DrumsYT"
 
 @Composable
 fun YouTubeEmbed(
@@ -30,9 +33,11 @@ fun YouTubeEmbed(
             // lifecycle observer and let the lib initialize the iframe API once the
             // view is attached + STARTED. Manual initialize() from inside the
             // AndroidView factory was racing the view attach and yielding UNKNOWN.
+            Log.d(TAG, "factory: creating YouTubePlayerView for videoId=$videoId")
             YouTubePlayerView(ctx).apply {
                 addYouTubePlayerListener(object : AbstractYouTubePlayerListener() {
                     override fun onReady(youTubePlayer: YouTubePlayer) {
+                        Log.d(TAG, "onReady fired; cueing videoId=$videoId")
                         adapter.bind(youTubePlayer)
                         adapter.notifyReady()
                         youTubePlayer.cueVideo(videoId, 0f)
@@ -41,6 +46,7 @@ fun YouTubeEmbed(
                         youTubePlayer: YouTubePlayer,
                         s: PlayerConstants.PlayerState,
                     ) {
+                        Log.d(TAG, "onStateChange: $s")
                         when (s) {
                             PlayerConstants.PlayerState.PLAYING -> adapter.notifyPlay()
                             PlayerConstants.PlayerState.PAUSED -> adapter.notifyPause()
@@ -55,7 +61,11 @@ fun YouTubeEmbed(
                         youTubePlayer: YouTubePlayer,
                         error: PlayerConstants.PlayerError,
                     ) {
+                        Log.e(TAG, "onError fired: $error (videoId=$videoId)")
                         adapter.notifyError(error.name)
+                    }
+                    override fun onApiChange(youTubePlayer: YouTubePlayer) {
+                        Log.d(TAG, "onApiChange fired")
                     }
                 })
                 view.value = this
