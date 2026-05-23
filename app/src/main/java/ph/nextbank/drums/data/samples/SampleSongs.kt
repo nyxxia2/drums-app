@@ -77,7 +77,6 @@ val SAMPLE_SONGS: List<Song> = listOf(
         coverInitials = "NV",
         importedFrom = ImportSource.BUNDLED,
         lastPlayed = null,
-        youtubeVideoId = "hTWKbfoikeg", // Nirvana — Smells Like Teen Spirit (official video)
     ),
     Song(
         id = "tom-sawyer",
@@ -89,7 +88,6 @@ val SAMPLE_SONGS: List<Song> = listOf(
         coverInitials = "RU",
         importedFrom = ImportSource.BUNDLED,
         lastPlayed = null,
-        youtubeVideoId = "auLBLk4ibAk", // Rush — Tom Sawyer
     ),
     Song(
         id = "rosanna",
@@ -101,7 +99,6 @@ val SAMPLE_SONGS: List<Song> = listOf(
         coverInitials = "TO",
         importedFrom = ImportSource.BUNDLED,
         lastPlayed = null,
-        youtubeVideoId = "qmOLtTGvsbM", // Toto — Rosanna
     ),
     Song(
         id = "in-the-air-tonight",
@@ -113,7 +110,6 @@ val SAMPLE_SONGS: List<Song> = listOf(
         coverInitials = "PC",
         importedFrom = ImportSource.BUNDLED,
         lastPlayed = null,
-        youtubeVideoId = "YkADj0TPrJA", // Phil Collins — In the Air Tonight (2016 remaster)
     ),
     Song(
         id = "yyz",
@@ -125,6 +121,5 @@ val SAMPLE_SONGS: List<Song> = listOf(
         coverInitials = "RU",
         importedFrom = ImportSource.BUNDLED,
         lastPlayed = null,
-        youtubeVideoId = "K0YgubvyZmw", // Rush — YYZ (live R30, well-known)
     ),
 )
