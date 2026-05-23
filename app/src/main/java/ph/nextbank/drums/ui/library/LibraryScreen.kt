@@ -78,9 +78,9 @@ fun LibraryScreen(
         else -> "ALL SONGS"
     }
     val emptyMessage = when (tab) {
-        "Recent" -> "You haven't played any songs yet."
-        "Bundled" -> "No bundled songs found."
-        else -> "Tap the + button to add a song."
+        "Recent" -> "Songs you've played show up here."
+        "Bundled" -> "Bundled songs show up here."
+        else -> "Tap the + button to add a song from Songsterr."
     }
 
     Box(Modifier.fillMaxSize().background(DrumsColors.Bg)) {
