@@ -37,7 +37,8 @@ object AppModule {
     @Provides @Singleton
     fun provideSongRepository(dao: SongDao, scope: CoroutineScope): SongRepository {
         val repo: SongRepository = RoomSongRepository(dao)
-        scope.launch { repo.upsertAll(SAMPLE_SONGS) }
+        // Seed bundled songs on first launch only — preserves user-set youtubeVideoId / offset / blocklist on subsequent starts.
+        scope.launch { repo.seedNew(SAMPLE_SONGS) }
         return repo
     }
 

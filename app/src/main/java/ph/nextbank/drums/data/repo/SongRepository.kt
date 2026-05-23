@@ -12,6 +12,8 @@ interface SongRepository {
     fun observeAll(): Flow<List<Song>>
     suspend fun findById(id: String): Song?
     suspend fun upsertAll(songs: List<Song>)
+    /** Insert songs that don't already exist (by id). Existing rows — including user-set youtubeVideoId / offset / blocklist — are untouched. */
+    suspend fun seedNew(songs: List<Song>)
     suspend fun updateBpm(id: String, bpm: Int)
     suspend fun updateYoutubeVideoId(id: String, videoId: String?)
     suspend fun updateYoutubeOffset(id: String, offsetMs: Int)
@@ -23,6 +25,7 @@ class RoomSongRepository @Inject constructor(private val dao: SongDao) : SongRep
     override fun observeAll(): Flow<List<Song>> = dao.observeAll().map { list -> list.map(SongEntity::toSong) }
     override suspend fun findById(id: String): Song? = dao.findById(id)?.toSong()
     override suspend fun upsertAll(songs: List<Song>) = dao.insertAll(songs.map(SongEntity::fromSong))
+    override suspend fun seedNew(songs: List<Song>) = dao.seedNew(songs.map(SongEntity::fromSong))
     override suspend fun updateBpm(id: String, bpm: Int) = dao.updateBpm(id, bpm)
     override suspend fun updateYoutubeVideoId(id: String, videoId: String?) = dao.updateYoutubeVideoId(id, videoId)
     override suspend fun updateYoutubeOffset(id: String, offsetMs: Int) = dao.updateYoutubeOffset(id, offsetMs)

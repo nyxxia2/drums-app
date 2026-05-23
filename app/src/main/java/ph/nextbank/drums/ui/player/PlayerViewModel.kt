@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -63,6 +64,7 @@ class PlayerViewModel @Inject constructor(
     val events: SharedFlow<PlayerEvent> = _events.asSharedFlow()
 
     private var source: PlaybackSource? = null
+    private val sourceJobs = mutableListOf<Job>()
 
     init {
         viewModelScope.launch {
@@ -145,7 +147,7 @@ class PlayerViewModel @Inject constructor(
         )
         source = src
         wireSource(src)
-        viewModelScope.launch {
+        sourceJobs += viewModelScope.launch {
             src.state.collect { st ->
                 if (st == PlaybackState.Ready &&
                     _state.value.phase is PlayerPhase.YouTubeBuffering
@@ -170,13 +172,15 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun wireSource(src: PlaybackSource) {
-        viewModelScope.launch {
+        sourceJobs.forEach { it.cancel() }
+        sourceJobs.clear()
+        sourceJobs += viewModelScope.launch {
             src.state.collect { _state.value = _state.value.copy(playbackState = it) }
         }
-        viewModelScope.launch {
+        sourceJobs += viewModelScope.launch {
             src.currentSlot.collect { _state.value = _state.value.copy(currentSlot = it) }
         }
-        viewModelScope.launch {
+        sourceJobs += viewModelScope.launch {
             src.activeSlotIndex.collect { _state.value = _state.value.copy(activeSlotIndex = it) }
         }
     }

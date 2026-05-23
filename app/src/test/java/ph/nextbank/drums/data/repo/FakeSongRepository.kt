@@ -15,6 +15,10 @@ class FakeSongRepository : SongRepository {
     override suspend fun upsertAll(s: List<Song>) {
         songs.value = songs.value + s.associateBy { it.id }
     }
+    override suspend fun seedNew(s: List<Song>) {
+        val existing = songs.value
+        songs.value = existing + s.filter { it.id !in existing }.associateBy { it.id }
+    }
     override suspend fun updateBpm(id: String, bpm: Int) {
         songs.value = songs.value + (id to songs.value[id]!!.copy(bpm = bpm))
     }

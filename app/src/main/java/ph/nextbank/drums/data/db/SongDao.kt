@@ -18,6 +18,10 @@ interface SongDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(songs: List<SongEntity>)
 
+    /** Insert songs that don't already exist by id. Used for the bundled-song seed so user-set fields (cached youtubeVideoId, youtubeOffsetMs, blocklist) survive across cold starts. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun seedNew(songs: List<SongEntity>)
+
     @Update
     suspend fun update(song: SongEntity)
 
