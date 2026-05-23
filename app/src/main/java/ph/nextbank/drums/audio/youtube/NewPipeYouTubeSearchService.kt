@@ -1,11 +1,14 @@
 package ph.nextbank.drums.audio.youtube
 
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.localization.Localization
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
+
+private const val TAG = "DrumsYT"
 
 class NewPipeYouTubeSearchService(
     private val initialized: Boolean = ensureInit(),
@@ -23,7 +26,10 @@ class NewPipeYouTubeSearchService(
                 val extractor = service.getSearchExtractor(handler)
                 extractor.fetchPage()
                 val items = extractor.getInitialPage().items
-                items.filterIsInstance<StreamInfoItem>()
+                val streamItems = items.filterIsInstance<StreamInfoItem>()
+                Log.d(TAG, "search '$query' returned ${streamItems.size} video items")
+
+                streamItems
                     .asSequence()
                     .mapNotNull { item ->
                         val id = item.url?.let(::extractVideoId) ?: return@mapNotNull null
@@ -36,9 +42,33 @@ class NewPipeYouTubeSearchService(
                             thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "",
                         )
                     }
+                    // Sort: prefer user uploads (more likely to allow embedding) over
+                    // VEVO / Topic / Official channels which routinely block embeds.
+                    .sortedBy { embedRestrictionScore(it.channelTitle) }
+                    .toList()
+                    .also { ranked ->
+                        Log.d(TAG, "after filtering blocklist=${blocklist.size}, ranked ${ranked.size} results; top channel='${ranked.firstOrNull()?.channelTitle}'")
+                    }
                     .firstOrNull()
             }.getOrNull()
         }
+
+    /**
+     * Heuristic: lower score = more likely to allow embedding.
+     * Vevo and YouTube Music Topic channels almost always block embeds;
+     * "Official" channels are usually owned by labels and block embeds too.
+     * User uploads / covers / lyric video channels get score 0.
+     */
+    private fun embedRestrictionScore(channel: String): Int {
+        val c = channel.lowercase()
+        return when {
+            c.endsWith("vevo") -> 100
+            c.endsWith(" - topic") -> 100
+            c.contains("official") -> 80
+            c.contains("records") -> 60   // record labels usually restrict
+            else -> 0
+        }
+    }
 
     /** Extract the 11-char video ID from a YouTube URL like https://www.youtube.com/watch?v=XXXXXXXXXXX. */
     private fun extractVideoId(url: String): String? {
