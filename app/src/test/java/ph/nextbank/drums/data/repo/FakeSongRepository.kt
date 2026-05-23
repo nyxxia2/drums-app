@@ -9,6 +9,8 @@ class FakeSongRepository : SongRepository {
     private val songs = MutableStateFlow<Map<String, Song>>(emptyMap())
     fun seed(song: Song) { songs.value = songs.value + (song.id to song) }
     fun snapshot(id: String): Song? = songs.value[id]
+    /** Test helper — returns all currently-stored songs. */
+    fun allSnapshot(): List<Song> = songs.value.values.toList()
 
     override fun observeAll(): Flow<List<Song>> = songs.map { it.values.toList() }
     override suspend fun findById(id: String): Song? = songs.value[id]
