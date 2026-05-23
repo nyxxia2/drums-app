@@ -60,71 +60,92 @@ fun AddSongScreen(
         }
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(DrumsColors.Bg)
-            .safeDrawingPadding()
-            .padding(horizontal = 16.dp),
-    ) {
-        Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    Box(Modifier.fillMaxSize().background(DrumsColors.Bg)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .padding(horizontal = 16.dp),
+        ) {
+            Spacer(Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .border(1.dp, DrumsColors.Line, CircleShape)
+                        .clickable(onClick = onBack),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = DrumsColors.Text) }
+                Spacer(Modifier.width(12.dp))
+                Text("Add a song", color = DrumsColors.Text, style = DrumsType.sectionTitle)
+            }
+
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "Search Songsterr — we'll grab the drum tab and find the audio on YouTube.",
+                color = DrumsColors.Dim, style = DrumsType.body,
+            )
+
+            Spacer(Modifier.height(16.dp))
             Box(
                 Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .border(1.dp, DrumsColors.Line, CircleShape)
-                    .clickable(onClick = onBack),
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(DrumsColors.Surface)
+                    .border(1.dp, DrumsColors.Line, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+            ) {
+                if (state.query.isEmpty()) {
+                    Text("Song or artist…", color = DrumsColors.Dim, style = DrumsType.body)
+                }
+                BasicTextField(
+                    value = state.query,
+                    onValueChange = vm::onQueryChanged,
+                    singleLine = true,
+                    textStyle = TextStyle(color = DrumsColors.Text),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+            when {
+                state.isSearching -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = DrumsColors.Accent)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Searching…", color = DrumsColors.Dim, style = DrumsType.caption)
+                    }
+                }
+                state.query.isNotBlank() && state.results.isEmpty() -> {
+                    Text("No results.", color = DrumsColors.Dim, style = DrumsType.caption)
+                }
+                else -> {
+                    LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                        items(state.results, key = { it.songId }) { result ->
+                            SongsterrResultRow(
+                                result = result,
+                                enabled = !state.isAdding,
+                                onClick = { vm.onResultClicked(result) },
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
+                }
+            }
+        }
+        if (state.isAdding) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(DrumsColors.Bg.copy(alpha = 0.85f)),
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = DrumsColors.Text) }
-            Spacer(Modifier.width(12.dp))
-            Text("Add a song", color = DrumsColors.Text, style = DrumsType.sectionTitle)
-        }
-
-        Spacer(Modifier.height(12.dp))
-        Text(
-            "Search Songsterr — we'll grab the drum tab and find the audio on YouTube.",
-            color = DrumsColors.Dim, style = DrumsType.body,
-        )
-
-        Spacer(Modifier.height(16.dp))
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(DrumsColors.Surface)
-                .border(1.dp, DrumsColors.Line, RoundedCornerShape(14.dp))
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-        ) {
-            if (state.query.isEmpty()) {
-                Text("Song or artist…", color = DrumsColors.Dim, style = DrumsType.body)
-            }
-            BasicTextField(
-                value = state.query,
-                onValueChange = vm::onQueryChanged,
-                singleLine = true,
-                textStyle = TextStyle(color = DrumsColors.Text),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-        Spacer(Modifier.height(16.dp))
-        if (state.isSearching) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = DrumsColors.Accent)
-                Spacer(Modifier.width(8.dp))
-                Text("Searching…", color = DrumsColors.Dim, style = DrumsType.caption)
-            }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                items(state.results, key = { it.songId }) { result ->
-                    SongsterrResultRow(
-                        result = result,
-                        enabled = !state.isAdding,
-                        onClick = { vm.onResultClicked(result) },
-                    )
-                    Spacer(Modifier.height(8.dp))
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = DrumsColors.Accent)
+                    Spacer(Modifier.height(12.dp))
+                    Text("Loading tab…", color = DrumsColors.Text, style = DrumsType.body)
                 }
             }
         }
