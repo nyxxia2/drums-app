@@ -9,6 +9,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.options.IFramePlayerOptions
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants
 import ph.nextbank.drums.audio.playback.YouTubeAdapter
@@ -34,13 +35,22 @@ fun YouTubeEmbed(
             // view is attached + STARTED. Manual initialize() from inside the
             // AndroidView factory was racing the view attach and yielding UNKNOWN.
             Log.d(TAG, "factory: creating YouTubePlayerView for videoId=$videoId")
+            val opts = IFramePlayerOptions.Builder()
+                .controls(1)
+                .autoplay(0)
+                .build()
             YouTubePlayerView(ctx).apply {
-                addYouTubePlayerListener(object : AbstractYouTubePlayerListener() {
+                enableAutomaticInitialization = false
+                val ytListener = object : AbstractYouTubePlayerListener() {
                     override fun onReady(youTubePlayer: YouTubePlayer) {
-                        Log.d(TAG, "onReady fired; cueing videoId=$videoId")
+                        Log.d(TAG, "onReady fired; loading videoId=$videoId")
                         adapter.bind(youTubePlayer)
                         adapter.notifyReady()
-                        youTubePlayer.cueVideo(videoId, 0f)
+                        // loadVideo (vs cueVideo) is more permissive about post-onReady
+                        // timing on some WebView versions where cueVideo fires UNKNOWN
+                        // a few ms after onReady. With autoplay(0) in IFramePlayerOptions
+                        // the load completes without auto-starting playback.
+                        youTubePlayer.loadVideo(videoId, 0f)
                     }
                     override fun onStateChange(
                         youTubePlayer: YouTubePlayer,
@@ -67,7 +77,11 @@ fun YouTubeEmbed(
                     override fun onApiChange(youTubePlayer: YouTubePlayer) {
                         Log.d(TAG, "onApiChange fired")
                     }
-                })
+                }
+                // Initialize with explicit IFramePlayerOptions so autoplay(0) takes effect.
+                // Without these options the lib's default iframe HTML page may start
+                // playback or differ in subtle ways.
+                initialize(ytListener, opts)
                 view.value = this
                 onAdapterReady(adapter)
             }
