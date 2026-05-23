@@ -6,11 +6,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import ph.nextbank.drums.ui.add.AddSongScreen
 import ph.nextbank.drums.ui.library.LibraryScreen
 import ph.nextbank.drums.ui.player.PlayerScreen
 import ph.nextbank.drums.ui.practice.PracticeScreen
 import ph.nextbank.drums.ui.song_detail.SongDetailScreen
-import ph.nextbank.drums.ui.upload.UploadScreen
 
 @Composable
 fun NavGraph() {
@@ -24,7 +24,7 @@ fun NavGraph() {
             )
         }
         composable(Route.Upload.path) {
-            UploadScreen(onBack = { nav.popBackStack() })
+            AddSongScreen(onBack = { nav.popBackStack() })
         }
         composable(
             Route.Player.PATH,
