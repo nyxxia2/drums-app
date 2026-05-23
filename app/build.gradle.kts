@@ -67,6 +67,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.common)
+    implementation(libs.rhino)
 
     testImplementation(libs.junit)
     testImplementation(libs.room.testing)

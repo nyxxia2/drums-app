@@ -76,16 +76,21 @@ class NewPipeYouTubeSearchService(
             runCatching {
                 val watchUrl = "https://www.youtube.com/watch?v=$videoId"
                 val info = StreamInfo.getInfo(ServiceList.YouTube, watchUrl)
-                // Pick the highest-bitrate progressive (single-file) audio stream — most
-                // compatible with ExoPlayer and avoids DASH/HLS adaptive complexity.
+                Log.d(TAG, "extracted $videoId: ${info.audioStreams.size} audio streams")
+                info.audioStreams.forEachIndexed { i, s ->
+                    Log.d(
+                        TAG,
+                        "  [$i] format=${s.format?.name} bps=${s.averageBitrate} " +
+                            "delivery=${s.deliveryMethod} contentLen=${s.content?.length} " +
+                            "isUrl=${s.isUrl}",
+                    )
+                }
+                // Prefer progressive (single-file URL) streams — ExoPlayer can play them
+                // directly without DASH manifest handling.
                 val best = info.audioStreams
-                    .filter { !it.content.isNullOrEmpty() }
+                    .filter { it.isUrl && !it.content.isNullOrEmpty() }
                     .maxByOrNull { it.averageBitrate }
-                Log.d(
-                    TAG,
-                    "audio stream for $videoId: ${best?.averageBitrate} bps, " +
-                        "format=${best?.format?.name}",
-                )
+                Log.d(TAG, "best stream for $videoId: bps=${best?.averageBitrate} url=${best?.content?.take(80)}")
                 best?.content
             }.onFailure { Log.e(TAG, "audio stream extraction failed for $videoId", it) }
                 .getOrNull()
