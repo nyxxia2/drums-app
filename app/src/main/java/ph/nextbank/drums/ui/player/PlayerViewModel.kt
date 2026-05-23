@@ -4,28 +4,54 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import ph.nextbank.drums.audio.DrumSampleBank
-import ph.nextbank.drums.audio.SongClock
+import ph.nextbank.drums.audio.DrumSampleBankApi
+import ph.nextbank.drums.audio.playback.PlaybackSource
+import ph.nextbank.drums.audio.playback.PlaybackState
+import ph.nextbank.drums.audio.playback.SyntheticPlaybackSource
+import ph.nextbank.drums.audio.playback.YouTubeAdapter
+import ph.nextbank.drums.audio.playback.YouTubePlaybackSource
+import ph.nextbank.drums.audio.youtube.SearchResult
+import ph.nextbank.drums.audio.youtube.YouTubeSearchService
 import ph.nextbank.drums.data.model.Song
 import ph.nextbank.drums.data.repo.SongRepository
 import javax.inject.Inject
 
+sealed interface PlayerPhase {
+    data object Loading : PlayerPhase
+    data object Searching : PlayerPhase
+    data class Confirming(val candidate: SearchResult) : PlayerPhase
+    data class YouTubeBuffering(val videoId: String) : PlayerPhase
+    data class YouTubeReady(val videoId: String) : PlayerPhase
+    data object SynthFallback : PlayerPhase
+}
+
 data class PlayerUiState(
     val song: Song? = null,
-    val playing: Boolean = false,
+    val phase: PlayerPhase = PlayerPhase.Loading,
+    val playbackState: PlaybackState = PlaybackState.Idle,
     val currentSlot: Float = 0f,
+    val activeSlotIndex: Int = 0,
+    val youtubeOffsetMs: Int = 0,
     val metronomeOn: Boolean = false,
     val looping: Boolean = false,
 )
 
+sealed interface PlayerEvent {
+    data class Toast(val message: String) : PlayerEvent
+}
+
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val repo: SongRepository,
-    val bank: DrumSampleBank,
+    private val bank: DrumSampleBankApi,
+    private val searchService: YouTubeSearchService,
     handle: SavedStateHandle,
 ) : ViewModel() {
     private val songId: String = handle.get<String>("songId")!!
@@ -33,50 +59,144 @@ class PlayerViewModel @Inject constructor(
     private val _state = MutableStateFlow(PlayerUiState())
     val state: StateFlow<PlayerUiState> = _state.asStateFlow()
 
-    var clock: SongClock? = null
-        private set
+    private val _events = MutableSharedFlow<PlayerEvent>(extraBufferCapacity = 8)
+    val events: SharedFlow<PlayerEvent> = _events.asSharedFlow()
+
+    private var source: PlaybackSource? = null
 
     init {
         viewModelScope.launch {
             val s = repo.findById(songId) ?: return@launch
-            clock = SongClock(
-                bpmProvider = { _state.value.song?.bpm ?: s.bpm },
-                totalSlots = s.totalBars * s.slotsPerBar,
-            ).also { it.looping = _state.value.looping }
-            _state.value = _state.value.copy(song = s)
+            _state.value = _state.value.copy(
+                song = s,
+                youtubeOffsetMs = s.youtubeOffsetMs,
+            )
+            val cachedId = s.youtubeVideoId
+            if (cachedId != null) {
+                _state.value = _state.value.copy(phase = PlayerPhase.YouTubeBuffering(cachedId))
+            } else {
+                runSearch(s, s.youtubeBlocklist.toSet())
+            }
         }
     }
 
-    fun togglePlay(nowMs: Long) {
-        val c = clock ?: return
-        if (c.isPlaying) c.pause(nowMs) else c.play(nowMs)
-        _state.value = _state.value.copy(playing = c.isPlaying)
-    }
-
-    fun stop() {
-        clock?.stop()
-        _state.value = _state.value.copy(playing = false, currentSlot = 0f)
-    }
-
-    fun onFrame(nowMs: Long) {
-        val c = clock ?: return
-        // Detect a clean end-of-song first so the visual playhead doesn't snap
-        // back to bar 1 on the same frame the audio scheduler tries to wrap.
-        if (c.isFinished(nowMs)) {
-            c.pause(nowMs)
-            _state.value = _state.value.copy(playing = false)
-            return
+    private suspend fun runSearch(song: Song, blocklist: Set<String>) {
+        _state.value = _state.value.copy(phase = PlayerPhase.Searching)
+        val query = "${song.title} ${song.artist}"
+        val result = searchService.findFor(query, blocklist)
+        if (result == null) {
+            _events.tryEmit(PlayerEvent.Toast("No YouTube result — playing synth drums"))
+            switchToSynth()
+        } else {
+            _state.value = _state.value.copy(phase = PlayerPhase.Confirming(result))
         }
-        val cur = c.currentSlot(nowMs)
-        _state.value = _state.value.copy(currentSlot = cur)
-        // Fire every slot crossed since last frame, not just the latest one —
-        // a jittery frame at fast tempo could otherwise drop drum hits.
+    }
+
+    fun acceptCandidate() {
+        val cur = _state.value
+        val candidate = (cur.phase as? PlayerPhase.Confirming)?.candidate ?: return
+        viewModelScope.launch {
+            repo.updateYoutubeVideoId(songId, candidate.videoId)
+            _state.value = cur.copy(
+                phase = PlayerPhase.YouTubeBuffering(candidate.videoId),
+                song = cur.song?.copy(youtubeVideoId = candidate.videoId),
+            )
+        }
+    }
+
+    fun tryAnotherVideo() {
+        val cur = _state.value
+        val song = cur.song ?: return
+        val rejectedId: String? = when (val p = cur.phase) {
+            is PlayerPhase.Confirming -> p.candidate.videoId
+            is PlayerPhase.YouTubeReady -> p.videoId
+            is PlayerPhase.YouTubeBuffering -> p.videoId
+            else -> null
+        }
+        viewModelScope.launch {
+            val newBlocklist = (song.youtubeBlocklist + listOfNotNull(rejectedId)).distinct()
+            repo.updateYoutubeBlocklist(songId, newBlocklist)
+            if (rejectedId != null) {
+                repo.updateYoutubeVideoId(songId, null)
+            }
+            source?.release(); source = null
+            val updatedSong = song.copy(
+                youtubeBlocklist = newBlocklist,
+                youtubeVideoId = null,
+            )
+            _state.value = cur.copy(song = updatedSong)
+            runSearch(updatedSong, newBlocklist.toSet())
+        }
+    }
+
+    fun dismissConfirmation() {
+        if (_state.value.phase is PlayerPhase.Confirming) switchToSynth()
+    }
+
+    fun bindYouTubeAdapter(adapter: YouTubeAdapter) {
         val s = _state.value.song ?: return
-        c.slotsJustEntered(nowMs).forEach { idx ->
-            val barIdx = idx / s.slotsPerBar
-            val slotIdx = idx % s.slotsPerBar
-            s.bars.getOrNull(barIdx)?.get(slotIdx)?.forEach(bank::play)
+        val phase = _state.value.phase as? PlayerPhase.YouTubeBuffering ?: return
+        val src = YouTubePlaybackSource(
+            songBpm = s.bpm,
+            slotsPerBeat = s.slotsPerBar / s.timeSig.first,
+            totalSlots = s.totalBars * s.slotsPerBar,
+            adapter = adapter,
+            initialOffsetMs = s.youtubeOffsetMs,
+        )
+        source = src
+        wireSource(src)
+        viewModelScope.launch {
+            src.state.collect { st ->
+                if (st == PlaybackState.Ready &&
+                    _state.value.phase is PlayerPhase.YouTubeBuffering
+                ) {
+                    _state.value = _state.value.copy(phase = PlayerPhase.YouTubeReady(phase.videoId))
+                }
+                if (st == PlaybackState.Error) {
+                    _events.tryEmit(PlayerEvent.Toast("YouTube failed — falling back to synth"))
+                    switchToSynth()
+                }
+            }
         }
+    }
+
+    private fun switchToSynth() {
+        source?.release()
+        val s = _state.value.song ?: return
+        val synth = SyntheticPlaybackSource(s, bank, viewModelScope)
+        source = synth
+        wireSource(synth)
+        _state.value = _state.value.copy(phase = PlayerPhase.SynthFallback)
+    }
+
+    private fun wireSource(src: PlaybackSource) {
+        viewModelScope.launch {
+            src.state.collect { _state.value = _state.value.copy(playbackState = it) }
+        }
+        viewModelScope.launch {
+            src.currentSlot.collect { _state.value = _state.value.copy(currentSlot = it) }
+        }
+        viewModelScope.launch {
+            src.activeSlotIndex.collect { _state.value = _state.value.copy(activeSlotIndex = it) }
+        }
+    }
+
+    fun togglePlay() {
+        val src = source ?: return
+        when (src.state.value) {
+            PlaybackState.Playing -> src.pause()
+            PlaybackState.Ready, PlaybackState.Paused, PlaybackState.Finished -> src.play()
+            else -> { }
+        }
+    }
+
+    fun stop() { source?.stop() }
+
+    fun nudgeOffset(deltaMs: Int) {
+        source?.nudgeOffset(deltaMs)
+        val newOffset = _state.value.youtubeOffsetMs + deltaMs
+        _state.value = _state.value.copy(youtubeOffsetMs = newOffset)
+        viewModelScope.launch { repo.updateYoutubeOffset(songId, newOffset) }
     }
 
     fun toggleMetronome() {
@@ -84,9 +204,11 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun toggleLoop() {
-        val c = clock ?: return
-        val newLoop = !_state.value.looping
-        c.looping = newLoop
-        _state.value = _state.value.copy(looping = newLoop)
+        _state.value = _state.value.copy(looping = !_state.value.looping)
+    }
+
+    override fun onCleared() {
+        source?.release()
+        super.onCleared()
     }
 }
