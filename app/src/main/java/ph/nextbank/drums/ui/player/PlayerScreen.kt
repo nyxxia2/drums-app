@@ -336,14 +336,3 @@ private fun IconBox(icon: ImageVector, cd: String, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) { Icon(icon, contentDescription = cd, tint = DrumsColors.Text) }
 }
-
-@Suppress("UNUSED_PARAMETER")
-@Composable
-private fun YouTubeConfirmDialog(
-    candidate: ph.nextbank.drums.audio.youtube.SearchResult,
-    onUseThis: () -> Unit,
-    onTryAnother: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    // Stub — full implementation lands in Task 16.
-}
