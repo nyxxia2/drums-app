@@ -14,21 +14,25 @@ This builds on Phase 1's drum-staff + cursor renderer; only the timing source an
 
 ### In scope
 
-1. **In-app YouTube search.** When the user opens a song that has no cached video, the app searches YouTube using `"<title> <artist>"` and proposes the top result via a confirmation dialog. User taps "Use this video" or "Try another".
+1. **In-app YouTube search for the 5 bundled songs.** When the user opens a bundled song that has no cached video, the app searches YouTube using `"<title> <artist>"` and proposes the top result via a confirmation dialog. User taps "Use this video" or "Try another".
 2. **YouTube as time source.** Once a video is locked in, the staff cursor's position is derived from the YouTube player's `currentSecond`, not from `SongClock`. Cursor motion is interpolated to 60 fps between YouTube position updates (which arrive at ~1 Hz).
 3. **Synthetic drums muted in YouTube mode.** When YouTube provides the audio, `DrumSampleBank` does not play. Drum-hit chips still light up so the user sees what should be hit.
 4. **Sync offset.** Per-song `youtubeOffsetMs` aligns bar 1 with the first downbeat of the recording. Adjustable from the Player (–/+ 50 ms steps).
 5. **"Try another video" flow.** Three-dots menu item runs a fresh search excluding any blocklisted video IDs. Each rejected video is added to that song's blocklist.
 6. **Robust loading / error states.** Play button is disabled with "Loading…" until the YouTube player reports ready. Network/search/playback errors surface as a toast and fall back to synthetic playback.
 7. **Fallback to synth.** If search returns no results, or the YouTube player can't initialize, the song plays with the existing synthetic drum samples — no regression from Phase 1 behavior.
+8. **Remove Spotify cruft from the UI.** Drop the "Spotify" pill tab in the Library, the "Connect Spotify" row in the Upload screen, and the `ImportSource.SPOTIFY` enum value. Nothing in the app uses these anymore. Library pills become `"All N" · "Recent" · "Bundled"`.
 
-### Out of scope (deferred)
+### Out of scope (deferred to Phase 3)
 
-- Adding new songs via URL paste or in-app text input (Upload screen stays stubbed).
-- Auto-transcription of tabs from YouTube audio.
-- Tabs sourced from Songsterr or any third-party site (legal/ToS blockers).
-- Variable playback speed (0.5× / 0.75×). Requires tempo-scaled staff math — deferred to Phase 2B.
-- Loop integration with YouTube `seekTo` (loop currently works on the synth clock; with YouTube as source, looping requires seeks). Deferred.
+- **Adding new songs via the "+" button** — the Library "+" → Upload screen flow stays stubbed. Phase 3 turns this into a "Search YouTube → pick a video → auto-transcribe a tab" flow.
+- **Auto-transcription of tabs from YouTube audio.** Phase 3 ships an on-device TFLite model (kick/snare/hi-hat at minimum) plus a tab-editor UI for fixing mistakes. Requires fetching YouTube audio via NewPipe Extractor's stream URLs — grey-area capability, accept the risk.
+- **Tabs sourced from Songsterr or any third-party site** — legal/ToS blockers, won't be built.
+
+### Out of scope (deferred to Phase 2B and beyond)
+
+- Variable playback speed (0.5× / 0.75×). Requires tempo-scaled staff math.
+- Loop integration with YouTube `seekTo` (loop currently works on the synth clock; with YouTube as source, looping requires seeks).
 - Tempo maps for songs whose recording tempo varies — Phase 1 assumes constant BPM and we keep that here.
 - Onboarding / first-run explainer for the confirmation dialog.
 
@@ -112,6 +116,16 @@ ALTER TABLE songs ADD COLUMN youtubeBlocklist TEXT NOT NULL DEFAULT '';
 ```
 
 `SampleSongs.kt`: **clear the hardcoded `youtubeVideoId` values** on the 5 bundled songs (set to `null`). The app will search and cache instead. This change affects only fresh installs — for users upgrading from a previous build, the migration leaves existing `youtubeVideoId` values intact (their cached choices persist). Result: a clean install always demonstrates the search flow; existing users keep their current videos.
+
+### 3.4a Spotify removal (UI cleanup)
+
+Phase 1 carries dead UI for a Spotify integration that won't ship. Remove:
+
+- **`LibraryScreen.kt:110`** — `listOf("All ${songs.size}", "Recent", "Spotify")` → `listOf("All ${songs.size}", "Recent", "Bundled")`. Update the `filter` and empty-state strings (lines 71, 77, 82) to filter on `importedFrom == BUNDLED` instead.
+- **`UploadScreen.kt:100`** — delete the `SourceRow(..., "Connect Spotify", ...)` line. The remaining "Take a photo" and "Choose PDF or image" rows stay as stubs for now.
+- **`ImportSource.kt`** — drop `SPOTIFY` from the enum. Compile-time errors will surface any remaining references; remove them.
+
+This is small, low-risk, and is the first milestone in the implementation plan (M0).
 
 ### 3.5 Player UI layout (landscape, no major changes from Phase 1)
 
@@ -225,7 +239,19 @@ For each of the 5 sample songs:
 - **APK size.** NewPipe Extractor + dependencies add roughly 1 MB to the APK. Acceptable.
 - **ToS for NewPipe Extractor.** The library scrapes YouTube without an API key, which is in a grey area but is well-established. We're not republishing content — just searching and embedding YouTube's own player. Embedding YouTube videos via the official IFrame/Android player is explicitly allowed by YouTube ToS.
 
-## 7. Definition of done
+## 7. Phase 3 preview (not built here, just sketched)
+
+For context on where this goes next — Phase 3 turns the "+" button into a real "Add song from YouTube" flow with auto-transcribed tabs:
+
+1. **Audio extraction** — NewPipe Extractor exposes the YouTube audio stream URL. App downloads (or streams) the AAC/Opus track and decodes to PCM via `MediaExtractor` + `MediaCodec`.
+2. **On-device transcription** — TFLite model (kick / snare / hi-hat at minimum, cymbals/toms if the model permits) emits per-frame onset probabilities.
+3. **Quantization** — onset peaks → DrumToken events → BPM estimation (e.g., `librosa.beat.beat_track` equivalent in Kotlin) → bars/slots in our existing data model.
+4. **Tab editor UI** — grid editor (rows = drums, columns = slots) so the user can fix mistakes after transcription. Save → song joins the Library catalog.
+5. **Risk acknowledgment** — audio extraction from YouTube is a grey-area capability and accept the risk that quality is imperfect.
+
+Phase 3 has its own design spec when we get there. This section just keeps the path visible so Phase 2 architecture decisions don't paint us into a corner.
+
+## 8. Definition of done
 
 - All 5 sample songs play with YouTube audio after the confirmation dialog flow.
 - Staff cursor stays in sync with YouTube playback within ±1 sixteenth note over 60 seconds (after a one-time nudge if needed).
