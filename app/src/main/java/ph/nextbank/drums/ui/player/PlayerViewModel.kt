@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import ph.nextbank.drums.audio.DrumSampleBankApi
 import ph.nextbank.drums.audio.playback.PlaybackSource
 import ph.nextbank.drums.audio.playback.PlaybackState
@@ -118,13 +119,21 @@ class PlayerViewModel @Inject constructor(
     /**
      * Fetch the audio stream URL for [videoId] and wire up an ExoPlayer-backed
      * YouTubePlaybackSource. Falls back to synth on any failure.
+     *
+     * NewPipe Extractor is unreliable: it sometimes returns 0 streams or hangs on a
+     * single call, often immediately after a successful one. Time-box the call and on
+     * failure drop straight to synth instead of cycling through more videos — every
+     * video can fail the same way during a "bad" window, and blocklisting them all
+     * pollutes the user's preferences. User can retry manually via "Try another video".
      */
     private suspend fun startYouTubePlayback(videoId: String) {
         _state.value = _state.value.copy(phase = PlayerPhase.YouTubeBuffering(videoId))
-        val streamUrl = searchService.getAudioStreamUrl(videoId)
+        val streamUrl = withTimeoutOrNull(STREAM_EXTRACT_TIMEOUT_MS) {
+            searchService.getAudioStreamUrl(videoId)
+        }
         if (streamUrl == null) {
-            _events.tryEmit(PlayerEvent.Toast("Couldn't extract audio — trying another"))
-            retry(autoAccept = true)
+            _events.tryEmit(PlayerEvent.Toast("YouTube audio unavailable right now — playing synth drums"))
+            switchToSynth()
             return
         }
         val s = _state.value.song ?: return
@@ -147,8 +156,8 @@ class PlayerViewModel @Inject constructor(
                 }
                 if (st == PlaybackState.Error) {
                     val reason = src.lastErrorMessage ?: "unknown"
-                    _events.tryEmit(PlayerEvent.Toast("Audio error ($reason) — trying another"))
-                    retry(autoAccept = true)
+                    _events.tryEmit(PlayerEvent.Toast("Audio error ($reason) — playing synth drums"))
+                    switchToSynth()
                 }
             }
         }
@@ -241,5 +250,10 @@ class PlayerViewModel @Inject constructor(
     override fun onCleared() {
         source?.release()
         super.onCleared()
+    }
+
+    companion object {
+        /** Max time we wait for NewPipe to extract an audio stream URL before giving up. */
+        private const val STREAM_EXTRACT_TIMEOUT_MS = 25_000L
     }
 }

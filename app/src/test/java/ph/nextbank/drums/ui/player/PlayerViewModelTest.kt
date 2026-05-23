@@ -170,14 +170,19 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun `audio URL extraction failure falls back to synth after exhausting search`() = runTest {
+    fun `audio URL extraction failure falls back to synth immediately`() = runTest {
         val seed = songWithoutVideo().copy(youtubeVideoId = "ccc33333333")
         val repo = FakeSongRepository().apply { seed(seed) }
-        // Empty audioUrls → extraction returns null every time; search also returns null → synth.
-        val search = FakeYouTubeSearchService().apply { shouldReturnNull = true }
+        // Empty audioUrls on the fake → getAudioStreamUrl returns null → switchToSynth.
+        // Important: we do NOT cycle through more search results (that pollutes the blocklist
+        // with perfectly good videos when NewPipe is flaky).
+        val search = FakeYouTubeSearchService()
         val vm = mkVm(repo, search)
         advanceUntilIdle()
         assertEquals(PlayerPhase.SynthFallback, vm.state.first().phase)
+        // Verify the cached videoId was NOT blocklisted.
+        val finalSong = repo.snapshot("test1")!!
+        assertEquals(emptyList<String>(), finalSong.youtubeBlocklist)
     }
 
     @Test
