@@ -15,7 +15,9 @@ import ph.nextbank.drums.audio.youtube.YouTubeSearchService
 import ph.nextbank.drums.data.db.AppDatabase
 import ph.nextbank.drums.data.db.SongDao
 import ph.nextbank.drums.data.repo.SongRepository
+import ph.nextbank.drums.data.repo.RoomSongRepository
 import ph.nextbank.drums.audio.DrumSampleBank
+import ph.nextbank.drums.audio.DrumSampleBankApi
 import ph.nextbank.drums.data.samples.SAMPLE_SONGS
 import javax.inject.Singleton
 
@@ -34,16 +36,13 @@ object AppModule {
 
     @Provides @Singleton
     fun provideSongRepository(dao: SongDao, scope: CoroutineScope): SongRepository {
-        val repo = SongRepository(dao)
-        // Idempotent seed: insertAll uses REPLACE on conflict, so re-seeding bundled
-        // songs is safe — user changes to bundled songs (e.g. BPM) are overwritten on
-        // app cold start. For Phase 1 that's acceptable; v1.1 can compare and skip.
+        val repo: SongRepository = RoomSongRepository(dao)
         scope.launch { repo.upsertAll(SAMPLE_SONGS) }
         return repo
     }
 
     @Provides @Singleton
-    fun provideDrumSampleBank(@ApplicationContext ctx: Context): DrumSampleBank = DrumSampleBank(ctx)
+    fun provideDrumSampleBank(@ApplicationContext ctx: Context): DrumSampleBankApi = DrumSampleBank(ctx)
 
     @Provides @Singleton
     fun provideYouTubeSearchService(): YouTubeSearchService = NewPipeYouTubeSearchService()

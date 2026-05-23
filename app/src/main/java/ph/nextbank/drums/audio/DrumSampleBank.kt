@@ -9,8 +9,12 @@ import ph.nextbank.drums.data.model.DrumToken
 import javax.inject.Inject
 import javax.inject.Singleton
 
+interface DrumSampleBankApi {
+    fun play(token: DrumToken)
+}
+
 @Singleton
-class DrumSampleBank @Inject constructor(@ApplicationContext private val ctx: Context) {
+class DrumSampleBank @Inject constructor(@ApplicationContext private val ctx: Context) : DrumSampleBankApi {
 
     private val pool: SoundPool = SoundPool.Builder()
         .setMaxStreams(16)
@@ -47,7 +51,9 @@ class DrumSampleBank @Inject constructor(@ApplicationContext private val ctx: Co
         }
     }
 
-    fun play(token: DrumToken, volume: Float = 1f) {
+    override fun play(token: DrumToken) = play(token, volume = 1f)
+
+    fun play(token: DrumToken, volume: Float) {
         val id = ids[token] ?: return
         if (id !in loaded) return
         pool.play(id, volume, volume, /* priority = */ 1, /* loop = */ 0, /* rate = */ 1f)

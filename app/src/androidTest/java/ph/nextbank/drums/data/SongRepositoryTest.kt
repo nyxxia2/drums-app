@@ -13,6 +13,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import ph.nextbank.drums.data.db.AppDatabase
+import ph.nextbank.drums.data.repo.RoomSongRepository
 import ph.nextbank.drums.data.repo.SongRepository
 import ph.nextbank.drums.data.samples.SAMPLE_SONGS
 
@@ -26,7 +27,7 @@ class SongRepositoryTest {
             ApplicationProvider.getApplicationContext(),
             AppDatabase::class.java,
         ).allowMainThreadQueries().build()
-        repo = SongRepository(db.songDao())
+        repo = RoomSongRepository(db.songDao())
     }
 
     @After fun tearDown() = db.close()

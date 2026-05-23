@@ -7,13 +7,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import ph.nextbank.drums.audio.DrumSampleBank
+import ph.nextbank.drums.audio.DrumSampleBankApi
 import ph.nextbank.drums.audio.SongClock
 import ph.nextbank.drums.data.model.Song
 
 class SyntheticPlaybackSource(
     private val song: Song,
-    private val bank: DrumSampleBank,
+    private val bank: DrumSampleBankApi,
     private val scope: CoroutineScope,
     private val nowMs: () -> Long = { android.os.SystemClock.elapsedRealtime() },
 ) : PlaybackSource {

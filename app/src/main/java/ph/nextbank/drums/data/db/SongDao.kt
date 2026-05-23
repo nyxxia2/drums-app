@@ -23,4 +23,13 @@ interface SongDao {
 
     @Query("UPDATE songs SET bpm = :bpm WHERE id = :id")
     suspend fun updateBpm(id: String, bpm: Int)
+
+    @Query("UPDATE songs SET youtubeVideoId = :videoId WHERE id = :id")
+    suspend fun updateYoutubeVideoId(id: String, videoId: String?)
+
+    @Query("UPDATE songs SET youtubeOffsetMs = :offsetMs WHERE id = :id")
+    suspend fun updateYoutubeOffset(id: String, offsetMs: Int)
+
+    @Query("UPDATE songs SET youtubeBlocklist = :blocklist WHERE id = :id")
+    suspend fun updateYoutubeBlocklist(id: String, blocklist: String)
 }
