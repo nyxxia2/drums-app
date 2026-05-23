@@ -10,8 +10,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import ph.nextbank.drums.audio.songsterr.DefaultDrumTabParser
+import ph.nextbank.drums.audio.songsterr.DrumTabParser
 import ph.nextbank.drums.audio.songsterr.OkHttpSongsterrSearchService
+import ph.nextbank.drums.audio.songsterr.OkHttpSongsterrTabFetcher
 import ph.nextbank.drums.audio.songsterr.SongsterrSearchService
+import ph.nextbank.drums.audio.songsterr.SongsterrTabFetcher
 import ph.nextbank.drums.audio.youtube.NewPipeYouTubeSearchService
 import ph.nextbank.drums.audio.youtube.YouTubeSearchService
 import ph.nextbank.drums.data.db.AppDatabase
@@ -55,6 +59,12 @@ object AppModule {
 
     @Provides @Singleton
     fun provideSongsterrSearchService(): SongsterrSearchService = OkHttpSongsterrSearchService()
+
+    @Provides @Singleton
+    fun provideSongsterrTabFetcher(): SongsterrTabFetcher = OkHttpSongsterrTabFetcher()
+
+    @Provides @Singleton
+    fun provideDrumTabParser(): DrumTabParser = DefaultDrumTabParser()
 
     @Provides @Singleton
     fun provideYouTubeAdapterFactory(@ApplicationContext ctx: Context): YouTubeAdapterFactory =
