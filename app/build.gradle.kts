@@ -62,6 +62,8 @@ dependencies {
     ksp(libs.room.compiler)
 
     implementation(libs.youtube.player)
+    implementation(libs.newpipe.extractor)
+    implementation(libs.okhttp)
 
     testImplementation(libs.junit)
     testImplementation(libs.room.testing)
