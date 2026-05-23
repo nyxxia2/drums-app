@@ -14,12 +14,24 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import ph.nextbank.drums.audio.FakeDrumSampleBank
+import ph.nextbank.drums.audio.playback.FakeYouTubeAdapter
+import ph.nextbank.drums.audio.playback.YouTubeAdapter
+import ph.nextbank.drums.audio.playback.YouTubeAdapterFactory
 import ph.nextbank.drums.audio.youtube.FakeYouTubeSearchService
 import ph.nextbank.drums.audio.youtube.SearchResult
 import ph.nextbank.drums.data.model.DrumToken
 import ph.nextbank.drums.data.model.ImportSource
 import ph.nextbank.drums.data.model.Song
 import ph.nextbank.drums.data.repo.FakeSongRepository
+
+private class FakeYouTubeAdapterFactory : YouTubeAdapterFactory {
+    val createdAdapters = mutableListOf<FakeYouTubeAdapter>()
+    val streamUrls = mutableListOf<String>()
+    override fun create(streamUrl: String): YouTubeAdapter {
+        streamUrls += streamUrl
+        return FakeYouTubeAdapter().also { createdAdapters += it }
+    }
+}
 
 class PlayerViewModelTest {
 
@@ -50,11 +62,13 @@ class PlayerViewModelTest {
     private fun mkVm(
         repo: FakeSongRepository,
         search: FakeYouTubeSearchService,
+        adapterFactory: YouTubeAdapterFactory = FakeYouTubeAdapterFactory(),
         songId: String = "test1",
     ) = PlayerViewModel(
         repo = repo,
         bank = FakeDrumSampleBank(),
         searchService = search,
+        adapterFactory = adapterFactory,
         handle = SavedStateHandle(mapOf("songId" to songId)),
     )
 
@@ -73,19 +87,29 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun `acceptCandidate caches videoId and moves to YouTubeBuffering`() = runTest {
+    fun `acceptCandidate caches videoId and starts YouTube playback`() = runTest {
         val repo = FakeSongRepository().apply { seed(songWithoutVideo()) }
         val search = FakeYouTubeSearchService().apply {
             queue = listOf(SearchResult("abc12345678", "T", "U", 100, ""))
+            audioUrls = mapOf("abc12345678" to "https://example.com/audio.m4a")
         }
-        val vm = mkVm(repo, search)
+        val factory = FakeYouTubeAdapterFactory()
+        val vm = mkVm(repo, search, factory)
         advanceUntilIdle()
         vm.acceptCandidate()
         advanceUntilIdle()
+        // VideoId cached + adapter constructed with the audio stream URL.
+        assertEquals("abc12345678", repo.snapshot("test1")!!.youtubeVideoId)
+        assertEquals(listOf("https://example.com/audio.m4a"), factory.streamUrls)
+        // Phase stays YouTubeBuffering until the adapter reports onReady.
         val phase = vm.state.first().phase
         assertTrue(phase is PlayerPhase.YouTubeBuffering)
         assertEquals("abc12345678", (phase as PlayerPhase.YouTubeBuffering).videoId)
-        assertEquals("abc12345678", repo.snapshot("test1")!!.youtubeVideoId)
+
+        // Simulate ExoPlayer reporting ready — should transition to YouTubeReady.
+        factory.createdAdapters.first().simulateReady()
+        advanceUntilIdle()
+        assertTrue(vm.state.first().phase is PlayerPhase.YouTubeReady)
     }
 
     @Test
@@ -130,16 +154,30 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun `song with cached video skips search and goes to YouTubeBuffering`() = runTest {
+    fun `song with cached video skips search and starts YouTube playback`() = runTest {
         val seed = songWithoutVideo().copy(youtubeVideoId = "ccc33333333")
         val repo = FakeSongRepository().apply { seed(seed) }
-        val search = FakeYouTubeSearchService()
+        val search = FakeYouTubeSearchService().apply {
+            audioUrls = mapOf("ccc33333333" to "https://example.com/audio.m4a")
+        }
+        val factory = FakeYouTubeAdapterFactory()
+        val vm = mkVm(repo, search, factory)
+        advanceUntilIdle()
+        // Search not called; audio extraction WAS called; adapter built.
+        assertEquals(null, search.lastQuery)
+        assertEquals(listOf("https://example.com/audio.m4a"), factory.streamUrls)
+        assertTrue(vm.state.first().phase is PlayerPhase.YouTubeBuffering)
+    }
+
+    @Test
+    fun `audio URL extraction failure falls back to synth after exhausting search`() = runTest {
+        val seed = songWithoutVideo().copy(youtubeVideoId = "ccc33333333")
+        val repo = FakeSongRepository().apply { seed(seed) }
+        // Empty audioUrls → extraction returns null every time; search also returns null → synth.
+        val search = FakeYouTubeSearchService().apply { shouldReturnNull = true }
         val vm = mkVm(repo, search)
         advanceUntilIdle()
-        val phase = vm.state.first().phase
-        assertTrue(phase is PlayerPhase.YouTubeBuffering)
-        assertEquals("ccc33333333", (phase as PlayerPhase.YouTubeBuffering).videoId)
-        assertEquals(null, search.lastQuery)
+        assertEquals(PlayerPhase.SynthFallback, vm.state.first().phase)
     }
 
     @Test

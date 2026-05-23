@@ -7,10 +7,15 @@ class FakeYouTubeSearchService : YouTubeSearchService {
     var lastBlocklist: Set<String> = emptySet()
     var shouldReturnNull: Boolean = false
 
+    /** Maps videoId -> audio URL the fake will return. */
+    var audioUrls: Map<String, String> = emptyMap()
+
     override suspend fun findFor(query: String, blocklist: Set<String>): SearchResult? {
         lastQuery = query
         lastBlocklist = blocklist
         if (shouldReturnNull) return null
         return queue.firstOrNull { it.videoId !in blocklist }
     }
+
+    override suspend fun getAudioStreamUrl(videoId: String): String? = audioUrls[videoId]
 }

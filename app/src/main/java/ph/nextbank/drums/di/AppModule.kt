@@ -18,6 +18,9 @@ import ph.nextbank.drums.data.repo.SongRepository
 import ph.nextbank.drums.data.repo.RoomSongRepository
 import ph.nextbank.drums.audio.DrumSampleBank
 import ph.nextbank.drums.audio.DrumSampleBankApi
+import ph.nextbank.drums.audio.playback.YouTubeAdapter
+import ph.nextbank.drums.audio.playback.YouTubeAdapterFactory
+import ph.nextbank.drums.ui.player.ExoYouTubeAdapter
 import ph.nextbank.drums.data.samples.SAMPLE_SONGS
 import javax.inject.Singleton
 
@@ -47,4 +50,10 @@ object AppModule {
 
     @Provides @Singleton
     fun provideYouTubeSearchService(): YouTubeSearchService = NewPipeYouTubeSearchService()
+
+    @Provides @Singleton
+    fun provideYouTubeAdapterFactory(@ApplicationContext ctx: Context): YouTubeAdapterFactory =
+        object : YouTubeAdapterFactory {
+            override fun create(streamUrl: String): YouTubeAdapter = ExoYouTubeAdapter(ctx, streamUrl)
+        }
 }

@@ -65,6 +65,8 @@ dependencies {
     implementation(libs.newpipe.extractor)
     implementation(libs.okhttp)
     implementation(libs.coil.compose)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.common)
 
     testImplementation(libs.junit)
     testImplementation(libs.room.testing)

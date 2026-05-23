@@ -16,7 +16,7 @@ import ph.nextbank.drums.audio.DrumSampleBankApi
 import ph.nextbank.drums.audio.playback.PlaybackSource
 import ph.nextbank.drums.audio.playback.PlaybackState
 import ph.nextbank.drums.audio.playback.SyntheticPlaybackSource
-import ph.nextbank.drums.audio.playback.YouTubeAdapter
+import ph.nextbank.drums.audio.playback.YouTubeAdapterFactory
 import ph.nextbank.drums.audio.playback.YouTubePlaybackSource
 import ph.nextbank.drums.audio.youtube.SearchResult
 import ph.nextbank.drums.audio.youtube.YouTubeSearchService
@@ -53,6 +53,7 @@ class PlayerViewModel @Inject constructor(
     private val repo: SongRepository,
     private val bank: DrumSampleBankApi,
     private val searchService: YouTubeSearchService,
+    private val adapterFactory: YouTubeAdapterFactory,
     handle: SavedStateHandle,
 ) : ViewModel() {
     private val songId: String = handle.get<String>("songId")!!
@@ -75,7 +76,7 @@ class PlayerViewModel @Inject constructor(
             )
             val cachedId = s.youtubeVideoId
             if (cachedId != null) {
-                _state.value = _state.value.copy(phase = PlayerPhase.YouTubeBuffering(cachedId))
+                startYouTubePlayback(cachedId)
             } else {
                 runSearch(s, s.youtubeBlocklist.toSet())
             }
@@ -108,9 +109,48 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             repo.updateYoutubeVideoId(songId, candidate.videoId)
             _state.value = cur.copy(
-                phase = PlayerPhase.YouTubeBuffering(candidate.videoId),
                 song = cur.song?.copy(youtubeVideoId = candidate.videoId),
             )
+            startYouTubePlayback(candidate.videoId)
+        }
+    }
+
+    /**
+     * Fetch the audio stream URL for [videoId] and wire up an ExoPlayer-backed
+     * YouTubePlaybackSource. Falls back to synth on any failure.
+     */
+    private suspend fun startYouTubePlayback(videoId: String) {
+        _state.value = _state.value.copy(phase = PlayerPhase.YouTubeBuffering(videoId))
+        val streamUrl = searchService.getAudioStreamUrl(videoId)
+        if (streamUrl == null) {
+            _events.tryEmit(PlayerEvent.Toast("Couldn't extract audio — trying another"))
+            retry(autoAccept = true)
+            return
+        }
+        val s = _state.value.song ?: return
+        val adapter = adapterFactory.create(streamUrl)
+        val src = YouTubePlaybackSource(
+            songBpm = s.bpm,
+            slotsPerBeat = s.slotsPerBar / s.timeSig.first,
+            totalSlots = s.totalBars * s.slotsPerBar,
+            adapter = adapter,
+            initialOffsetMs = s.youtubeOffsetMs,
+        )
+        source = src
+        wireSource(src)
+        sourceJobs += viewModelScope.launch {
+            src.state.collect { st ->
+                if (st == PlaybackState.Ready &&
+                    _state.value.phase is PlayerPhase.YouTubeBuffering
+                ) {
+                    _state.value = _state.value.copy(phase = PlayerPhase.YouTubeReady(videoId))
+                }
+                if (st == PlaybackState.Error) {
+                    val reason = src.lastErrorMessage ?: "unknown"
+                    _events.tryEmit(PlayerEvent.Toast("Audio error ($reason) — trying another"))
+                    retry(autoAccept = true)
+                }
+            }
         }
     }
 
@@ -146,37 +186,8 @@ class PlayerViewModel @Inject constructor(
         if (_state.value.phase is PlayerPhase.Confirming) switchToSynth()
     }
 
-    fun bindYouTubeAdapter(adapter: YouTubeAdapter) {
-        val s = _state.value.song ?: return
-        val phase = _state.value.phase as? PlayerPhase.YouTubeBuffering ?: return
-        val src = YouTubePlaybackSource(
-            songBpm = s.bpm,
-            slotsPerBeat = s.slotsPerBar / s.timeSig.first,
-            totalSlots = s.totalBars * s.slotsPerBar,
-            adapter = adapter,
-            initialOffsetMs = s.youtubeOffsetMs,
-        )
-        source = src
-        wireSource(src)
-        sourceJobs += viewModelScope.launch {
-            src.state.collect { st ->
-                if (st == PlaybackState.Ready &&
-                    _state.value.phase is PlayerPhase.YouTubeBuffering
-                ) {
-                    _state.value = _state.value.copy(phase = PlayerPhase.YouTubeReady(phase.videoId))
-                }
-                if (st == PlaybackState.Error) {
-                    val reason = src.lastErrorMessage ?: "unknown"
-                    _events.tryEmit(PlayerEvent.Toast("Video can't play ($reason) — trying another"))
-                    // Many official music videos block embedded playback
-                    // (VIDEO_NOT_PLAYABLE_IN_CONTAINER). Auto-blocklist this video and
-                    // retry with the next search result, skipping confirmation since the
-                    // user already opted into YouTube playback for this song.
-                    retry(autoAccept = true)
-                }
-            }
-        }
-    }
+    // bindYouTubeAdapter removed — startYouTubePlayback now constructs the ExoPlayer
+    // adapter directly inside the ViewModel. The Composable no longer hands one in.
 
     private fun switchToSynth() {
         source?.release()

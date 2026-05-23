@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.localization.Localization
+import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 
 private const val TAG = "DrumsYT"
@@ -69,6 +70,26 @@ class NewPipeYouTubeSearchService(
             else -> 0
         }
     }
+
+    override suspend fun getAudioStreamUrl(videoId: String): String? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val watchUrl = "https://www.youtube.com/watch?v=$videoId"
+                val info = StreamInfo.getInfo(ServiceList.YouTube, watchUrl)
+                // Pick the highest-bitrate progressive (single-file) audio stream — most
+                // compatible with ExoPlayer and avoids DASH/HLS adaptive complexity.
+                val best = info.audioStreams
+                    .filter { !it.content.isNullOrEmpty() }
+                    .maxByOrNull { it.averageBitrate }
+                Log.d(
+                    TAG,
+                    "audio stream for $videoId: ${best?.averageBitrate} bps, " +
+                        "format=${best?.format?.name}",
+                )
+                best?.content
+            }.onFailure { Log.e(TAG, "audio stream extraction failed for $videoId", it) }
+                .getOrNull()
+        }
 
     /** Extract the 11-char video ID from a YouTube URL like https://www.youtube.com/watch?v=XXXXXXXXXXX. */
     private fun extractVideoId(url: String): String? {

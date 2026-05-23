@@ -10,6 +10,8 @@ interface YouTubeAdapter {
     fun stop()
     fun seekToSeconds(seconds: Float)
     fun setListener(listener: YouTubeAdapterListener)
+    /** Release any underlying resources (player instance, network observer, etc.). */
+    fun release() {}
 }
 
 interface YouTubeAdapterListener {
@@ -80,7 +82,5 @@ class YouTubePlaybackSource(
         _activeSlotIndex.value = 0
     }
     override fun nudgeOffset(deltaMs: Int) { offsetMs += deltaMs }
-    override fun release() {
-        // Adapter owns the actual YouTubePlayer lifecycle; nothing to do here.
-    }
+    override fun release() { adapter.release() }
 }

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -97,14 +96,11 @@ fun PlayerScreen(
 
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 StaffArea(state, song)
-                YouTubePanel(
+                AudioStatusPill(
                     phase = state.phase,
-                    onAdapterReady = vm::bindYouTubeAdapter,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .width(240.dp)
-                        .aspectRatio(16f / 9f),
+                        .padding(8.dp),
                 )
             }
 
@@ -222,38 +218,32 @@ private fun StaffArea(state: PlayerUiState, song: ph.nextbank.drums.data.model.S
 }
 
 @Composable
-private fun YouTubePanel(
-    phase: PlayerPhase,
-    onAdapterReady: (ph.nextbank.drums.audio.playback.YouTubeAdapter) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val videoId = when (phase) {
-        is PlayerPhase.YouTubeReady -> phase.videoId
-        is PlayerPhase.YouTubeBuffering -> phase.videoId
-        else -> null
+private fun AudioStatusPill(phase: PlayerPhase, modifier: Modifier = Modifier) {
+    val (label, showSpinner) = when (phase) {
+        is PlayerPhase.Loading -> "Loading…" to true
+        is PlayerPhase.Searching -> "Searching YouTube…" to true
+        is PlayerPhase.Confirming -> "Awaiting confirmation" to false
+        is PlayerPhase.YouTubeBuffering -> "Loading audio…" to true
+        is PlayerPhase.YouTubeReady -> "♪ YouTube audio" to false
+        is PlayerPhase.SynthFallback -> "Synth mode" to false
     }
-    if (videoId == null) {
-        Box(
-            modifier = modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(DrumsColors.Surface2)
-                .border(1.dp, DrumsColors.Line, RoundedCornerShape(12.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            when (phase) {
-                is PlayerPhase.Searching -> Text("Searching YouTube…", color = DrumsColors.Dim, style = DrumsType.caption)
-                is PlayerPhase.SynthFallback -> Text("Synth mode", color = DrumsColors.Dim, style = DrumsType.caption)
-                else -> CircularProgressIndicator(color = DrumsColors.Accent)
-            }
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(DrumsColors.Surface2)
+            .border(1.dp, DrumsColors.Line, RoundedCornerShape(999.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (showSpinner) {
+            CircularProgressIndicator(
+                color = DrumsColors.Accent,
+                strokeWidth = 2.dp,
+                modifier = Modifier.size(14.dp),
+            )
         }
-        return
-    }
-    Box(modifier = modifier.clip(RoundedCornerShape(12.dp))) {
-        YouTubeEmbed(
-            videoId = videoId,
-            modifier = Modifier.fillMaxSize(),
-            onAdapterReady = onAdapterReady,
-        )
+        Text(label, color = DrumsColors.Dim, style = DrumsType.caption)
     }
 }
 

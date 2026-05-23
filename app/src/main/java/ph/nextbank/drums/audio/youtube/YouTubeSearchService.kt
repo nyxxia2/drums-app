@@ -7,6 +7,13 @@ interface YouTubeSearchService {
      * fails.
      */
     suspend fun findFor(query: String, blocklist: Set<String> = emptySet()): SearchResult?
+
+    /**
+     * Extract a directly-playable audio stream URL for [videoId]. The URL is
+     * short-lived (typically expires within ~6 hours) so callers should fetch
+     * fresh each time. Returns null on extraction failure.
+     */
+    suspend fun getAudioStreamUrl(videoId: String): String?
 }
 
 data class SearchResult(
