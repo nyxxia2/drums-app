@@ -41,6 +41,10 @@ class YouTubePlaybackSource(
     var offsetMs: Int = initialOffsetMs
         private set
 
+    /** Last error message reported by the YouTube player (e.g. "VIDEO_NOT_PLAYABLE_IN_CONTAINER"). */
+    var lastErrorMessage: String? = null
+        private set
+
     private val msPerSlot: Float = (60_000f / songBpm) / slotsPerBeat
 
     init {
@@ -53,7 +57,10 @@ class YouTubePlaybackSource(
                 if (_state.value == PlaybackState.Playing) _state.value = PlaybackState.Paused
             }
             override fun onEnded() { _state.value = PlaybackState.Finished }
-            override fun onError(message: String) { _state.value = PlaybackState.Error }
+            override fun onError(message: String) {
+                lastErrorMessage = message
+                _state.value = PlaybackState.Error
+            }
             override fun onCurrentSecond(seconds: Float) {
                 val effectiveMs = seconds * 1000f + offsetMs
                 val slot = effectiveMs / msPerSlot

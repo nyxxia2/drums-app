@@ -82,13 +82,21 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    private suspend fun runSearch(song: Song, blocklist: Set<String>) {
+    private suspend fun runSearch(song: Song, blocklist: Set<String>, autoAccept: Boolean = false) {
         _state.value = _state.value.copy(phase = PlayerPhase.Searching)
         val query = "${song.title} ${song.artist}"
         val result = searchService.findFor(query, blocklist)
         if (result == null) {
-            _events.tryEmit(PlayerEvent.Toast("No YouTube result — playing synth drums"))
+            _events.tryEmit(PlayerEvent.Toast("No playable YouTube result — playing synth drums"))
             switchToSynth()
+        } else if (autoAccept) {
+            // Skip the confirmation dialog — used when retrying after the previously accepted
+            // video errored out (e.g. embedding restriction). User already opted in.
+            repo.updateYoutubeVideoId(songId, result.videoId)
+            _state.value = _state.value.copy(
+                phase = PlayerPhase.YouTubeBuffering(result.videoId),
+                song = _state.value.song?.copy(youtubeVideoId = result.videoId),
+            )
         } else {
             _state.value = _state.value.copy(phase = PlayerPhase.Confirming(result))
         }
@@ -106,7 +114,10 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun tryAnotherVideo() {
+    fun tryAnotherVideo() = retry(autoAccept = false)
+
+    /** Internal retry that can skip the confirmation dialog — used for auto-retry after a YouTube error. */
+    private fun retry(autoAccept: Boolean) {
         val cur = _state.value
         val song = cur.song ?: return
         val rejectedId: String? = when (val p = cur.phase) {
@@ -127,7 +138,7 @@ class PlayerViewModel @Inject constructor(
                 youtubeVideoId = null,
             )
             _state.value = cur.copy(song = updatedSong)
-            runSearch(updatedSong, newBlocklist.toSet())
+            runSearch(updatedSong, newBlocklist.toSet(), autoAccept = autoAccept)
         }
     }
 
@@ -155,8 +166,13 @@ class PlayerViewModel @Inject constructor(
                     _state.value = _state.value.copy(phase = PlayerPhase.YouTubeReady(phase.videoId))
                 }
                 if (st == PlaybackState.Error) {
-                    _events.tryEmit(PlayerEvent.Toast("YouTube failed — falling back to synth"))
-                    switchToSynth()
+                    val reason = src.lastErrorMessage ?: "unknown"
+                    _events.tryEmit(PlayerEvent.Toast("Video can't play ($reason) — trying another"))
+                    // Many official music videos block embedded playback
+                    // (VIDEO_NOT_PLAYABLE_IN_CONTAINER). Auto-blocklist this video and
+                    // retry with the next search result, skipping confirmation since the
+                    // user already opted into YouTube playback for this song.
+                    retry(autoAccept = true)
                 }
             }
         }
