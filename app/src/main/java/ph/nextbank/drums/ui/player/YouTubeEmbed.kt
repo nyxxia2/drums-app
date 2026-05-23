@@ -5,12 +5,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.options.IFramePlayerOptions
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants
 import ph.nextbank.drums.audio.playback.YouTubeAdapter
@@ -24,23 +21,17 @@ fun YouTubeEmbed(
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val view = remember(videoId) { mutableHolder<YouTubePlayerView>() }
+    val adapter = remember(videoId) { YouTubePlayerAdapter() }
 
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
-            // Per the lib docs, both `origin` and `rel` must be set on the iframe for
-            // many embed-restricted videos to play. The lib's default options omit them.
-            val opts = IFramePlayerOptions.Builder()
-                .controls(1)              // show YouTube controls (helps with some embed errors)
-                .fullscreen(0)
-                .autoplay(0)
-                .rel(0)
-                .ivLoadPolicy(3)
-                .build()
+            // Use the lib's automatic-initialization pattern: register the view as a
+            // lifecycle observer and let the lib initialize the iframe API once the
+            // view is attached + STARTED. Manual initialize() from inside the
+            // AndroidView factory was racing the view attach and yielding UNKNOWN.
             YouTubePlayerView(ctx).apply {
-                enableAutomaticInitialization = false
-                val adapter = YouTubePlayerAdapter()
-                initialize(object : AbstractYouTubePlayerListener() {
+                addYouTubePlayerListener(object : AbstractYouTubePlayerListener() {
                     override fun onReady(youTubePlayer: YouTubePlayer) {
                         adapter.bind(youTubePlayer)
                         adapter.notifyReady()
@@ -66,24 +57,19 @@ fun YouTubeEmbed(
                     ) {
                         adapter.notifyError(error.name)
                     }
-                }, opts)
-                // Register the view itself as a lifecycle observer (lib pattern) — without
-                // this the iframe sometimes reports UNKNOWN errors on first init.
-                lifecycleOwner.lifecycle.addObserver(this)
-                onAdapterReady(adapter)
+                })
                 view.value = this
+                onAdapterReady(adapter)
             }
         },
     )
 
     DisposableEffect(lifecycleOwner, view) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_DESTROY) view.value?.release()
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
+        // Lib auto-initializes on lifecycle START + attached. Register and let it run.
+        val yt = view.value
+        yt?.let { lifecycleOwner.lifecycle.addObserver(it) }
         onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            view.value?.let {
+            yt?.let {
                 lifecycleOwner.lifecycle.removeObserver(it)
                 it.release()
             }
