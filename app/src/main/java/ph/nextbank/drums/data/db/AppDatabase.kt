@@ -11,7 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-@Database(entities = [SongEntity::class], version = 2, exportSchema = false)
+@Database(entities = [SongEntity::class], version = 3, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun songDao(): SongDao
@@ -24,14 +24,20 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v2 → v3: added youtubeOffsetMs + youtubeBlocklist for sync nudge + "Try another video". */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE songs ADD COLUMN youtubeOffsetMs INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE songs ADD COLUMN youtubeBlocklist TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun build(ctx: Context, scope: CoroutineScope): AppDatabase =
             Room.databaseBuilder(ctx, AppDatabase::class.java, "drums.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
-                        // Seeding happens in AppModule.provideSongRepository because the
-                        // callback can't access the Hilt-provided DAO directly.
                         scope.launch(Dispatchers.IO) { /* no-op */ }
                     }
                 })

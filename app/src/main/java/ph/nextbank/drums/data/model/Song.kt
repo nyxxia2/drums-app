@@ -11,13 +11,17 @@ data class Song(
     val title: String,
     val artist: String,
     val bpm: Int,
-    val timeSig: Pair<Int, Int>,        // (beatsPerBar, beatUnit) — Phase 1 always (4, 4)
+    val timeSig: Pair<Int, Int>,
     val bars: List<List<List<DrumToken>>>,
-    val coverInitials: String,           // e.g. "NV", "RU"
+    val coverInitials: String,
     val importedFrom: ImportSource,
     val lastPlayed: Instant?,
-    /** 11-char YouTube video ID, e.g. "hTWKbfoikeg". null = play with bundled samples. */
+    /** 11-char YouTube video ID. null = the app will search YouTube on first open. */
     val youtubeVideoId: String? = null,
+    /** Sync nudge: positive = video plays earlier relative to staff bar 1. */
+    val youtubeOffsetMs: Int = 0,
+    /** YouTube video IDs the user said "Try another video" on. */
+    val youtubeBlocklist: List<String> = emptyList(),
 ) {
     val totalBars: Int get() = bars.size
     val slotsPerBar: Int get() = bars.firstOrNull()?.size ?: 16

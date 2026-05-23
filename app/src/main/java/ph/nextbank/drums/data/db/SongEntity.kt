@@ -15,12 +15,14 @@ data class SongEntity(
     val bpm: Int,
     val beatsPerBar: Int,
     val beatUnit: Int,
-    /** Encoded bars: bars separated by '|', slots by ',', tokens within a slot by '+'. Empty slot = empty string. */
     val barsEncoded: String,
     val coverInitials: String,
     val importedFrom: ImportSource,
     val lastPlayedEpochMs: Long?,
     val youtubeVideoId: String?,
+    val youtubeOffsetMs: Int,
+    /** Comma-separated YouTube IDs. Empty string = no blocklist. */
+    val youtubeBlocklist: String,
 ) {
     fun toSong(): Song = Song(
         id = id,
@@ -33,6 +35,8 @@ data class SongEntity(
         importedFrom = importedFrom,
         lastPlayed = lastPlayedEpochMs?.let(Instant::ofEpochMilli),
         youtubeVideoId = youtubeVideoId,
+        youtubeOffsetMs = youtubeOffsetMs,
+        youtubeBlocklist = decodeBlocklist(youtubeBlocklist),
     )
 
     companion object {
@@ -48,6 +52,8 @@ data class SongEntity(
             importedFrom = s.importedFrom,
             lastPlayedEpochMs = s.lastPlayed?.toEpochMilli(),
             youtubeVideoId = s.youtubeVideoId,
+            youtubeOffsetMs = s.youtubeOffsetMs,
+            youtubeBlocklist = encodeBlocklist(s.youtubeBlocklist),
         )
 
         internal fun encodeBars(bars: List<List<List<DrumToken>>>): String =
@@ -62,5 +68,9 @@ data class SongEntity(
                     else slot.split("+").map(DrumToken::fromCode)
                 }
             }
+
+        internal fun encodeBlocklist(ids: List<String>): String = ids.joinToString(",")
+        internal fun decodeBlocklist(s: String): List<String> =
+            if (s.isEmpty()) emptyList() else s.split(",")
     }
 }
