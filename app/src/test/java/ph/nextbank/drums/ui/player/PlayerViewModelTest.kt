@@ -170,19 +170,41 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun `audio URL extraction failure falls back to synth immediately`() = runTest {
+    fun `audio URL extraction failure retries with next search result then falls back when exhausted`() = runTest {
         val seed = songWithoutVideo().copy(youtubeVideoId = "ccc33333333")
         val repo = FakeSongRepository().apply { seed(seed) }
-        // Empty audioUrls on the fake → getAudioStreamUrl returns null → switchToSynth.
-        // Important: we do NOT cycle through more search results (that pollutes the blocklist
-        // with perfectly good videos when NewPipe is flaky).
+        // Empty audioUrls + empty search queue → first extraction fails, retry searches for
+        // a fresh candidate, search returns null, falls back to synth. The failed video IS
+        // blocklisted so re-opening the song skips it.
         val search = FakeYouTubeSearchService()
         val vm = mkVm(repo, search)
         advanceUntilIdle()
         assertEquals(PlayerPhase.SynthFallback, vm.state.first().phase)
-        // Verify the cached videoId was NOT blocklisted.
-        val finalSong = repo.snapshot("test1")!!
-        assertEquals(emptyList<String>(), finalSong.youtubeBlocklist)
+        assertEquals(listOf("ccc33333333"), repo.snapshot("test1")!!.youtubeBlocklist)
+    }
+
+    @Test
+    fun `extraction failures hit cap of 3 then fall back to synth`() = runTest {
+        val seed = songWithoutVideo().copy(youtubeVideoId = "aaa11111111")
+        val repo = FakeSongRepository().apply { seed(seed) }
+        // All extractions fail (audioUrls is empty). The first failure consumes the cached
+        // videoId; auto-retry searches up to 2 more candidates; on the 3rd extraction
+        // failure the cap is hit and we fall back to synth without searching again.
+        val search = FakeYouTubeSearchService().apply {
+            queue = listOf(
+                SearchResult("bbb22222222", "Second", "U", 100, ""),
+                SearchResult("ccc33333333", "Third", "U", 100, ""),
+                SearchResult("ddd44444444", "Fourth", "U", 100, ""),
+            )
+        }
+        val vm = mkVm(repo, search)
+        advanceUntilIdle()
+        assertEquals(PlayerPhase.SynthFallback, vm.state.first().phase)
+        // Videos that failed and triggered a retry are blocklisted. The cap-hit video
+        // (the 3rd attempt) is NOT blocklisted — we can't be sure NewPipe wouldn't have
+        // succeeded on it given another chance, so we leave the door open.
+        val blocklist = repo.snapshot("test1")!!.youtubeBlocklist
+        assertEquals(listOf("aaa11111111", "bbb22222222"), blocklist)
     }
 
     @Test

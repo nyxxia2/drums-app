@@ -67,6 +67,8 @@ class PlayerViewModel @Inject constructor(
 
     private var source: PlaybackSource? = null
     private val sourceJobs = mutableListOf<Job>()
+    /** Counts how many videos we've tried for this song since open. Bounded to avoid loops. */
+    private var extractionAttempts = 0
 
     init {
         viewModelScope.launch {
@@ -96,9 +98,9 @@ class PlayerViewModel @Inject constructor(
             // video errored out (e.g. embedding restriction). User already opted in.
             repo.updateYoutubeVideoId(songId, result.videoId)
             _state.value = _state.value.copy(
-                phase = PlayerPhase.YouTubeBuffering(result.videoId),
                 song = _state.value.song?.copy(youtubeVideoId = result.videoId),
             )
+            startYouTubePlayback(result.videoId)
         } else {
             _state.value = _state.value.copy(phase = PlayerPhase.Confirming(result))
         }
@@ -118,22 +120,28 @@ class PlayerViewModel @Inject constructor(
 
     /**
      * Fetch the audio stream URL for [videoId] and wire up an ExoPlayer-backed
-     * YouTubePlaybackSource. Falls back to synth on any failure.
+     * YouTubePlaybackSource.
      *
-     * NewPipe Extractor is unreliable: it sometimes returns 0 streams or hangs on a
-     * single call, often immediately after a successful one. Time-box the call and on
-     * failure drop straight to synth instead of cycling through more videos — every
-     * video can fail the same way during a "bad" window, and blocklisting them all
-     * pollutes the user's preferences. User can retry manually via "Try another video".
+     * NewPipe Extractor sometimes returns 0 streams for specific videos (YouTube applies
+     * per-video player-JS obfuscation that NewPipe can't always decode). Up to
+     * [MAX_EXTRACTION_ATTEMPTS] different videos are tried per song open before falling
+     * back to synth. Failed videoIds are added to the persistent blocklist so re-opening
+     * the song skips them too.
      */
     private suspend fun startYouTubePlayback(videoId: String) {
         _state.value = _state.value.copy(phase = PlayerPhase.YouTubeBuffering(videoId))
+        extractionAttempts++
         val streamUrl = withTimeoutOrNull(STREAM_EXTRACT_TIMEOUT_MS) {
             searchService.getAudioStreamUrl(videoId)
         }
         if (streamUrl == null) {
-            _events.tryEmit(PlayerEvent.Toast("YouTube audio unavailable right now — playing synth drums"))
-            switchToSynth()
+            if (extractionAttempts >= MAX_EXTRACTION_ATTEMPTS) {
+                _events.tryEmit(PlayerEvent.Toast("YouTube audio unavailable — playing synth drums"))
+                switchToSynth()
+                return
+            }
+            _events.tryEmit(PlayerEvent.Toast("Audio unavailable for this video — trying another"))
+            retry(autoAccept = true)
             return
         }
         val s = _state.value.song ?: return
@@ -255,5 +263,7 @@ class PlayerViewModel @Inject constructor(
     companion object {
         /** Max time we wait for NewPipe to extract an audio stream URL before giving up. */
         private const val STREAM_EXTRACT_TIMEOUT_MS = 25_000L
+        /** Max videos to try for a single song before falling back to synth. */
+        private const val MAX_EXTRACTION_ATTEMPTS = 3
     }
 }
