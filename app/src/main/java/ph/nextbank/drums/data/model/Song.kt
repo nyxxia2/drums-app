@@ -22,6 +22,10 @@ data class Song(
     val youtubeOffsetMs: Int = 0,
     /** YouTube video IDs the user said "Try another video" on. */
     val youtubeBlocklist: List<String> = emptyList(),
+    /** Songsterr songId for songs added via the Add Song flow. null for legacy / bundled songs. */
+    val songsterrId: Long? = null,
+    /** Songsterr revisionId for re-fetching. null for legacy / bundled songs. */
+    val songsterrRevisionId: String? = null,
 ) {
     val totalBars: Int get() = bars.size
     val slotsPerBar: Int get() = bars.firstOrNull()?.size ?: 16

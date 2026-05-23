@@ -23,6 +23,8 @@ data class SongEntity(
     val youtubeOffsetMs: Int,
     /** Comma-separated YouTube IDs. Empty string = no blocklist. */
     val youtubeBlocklist: String,
+    val songsterrId: Long?,
+    val songsterrRevisionId: String?,
 ) {
     fun toSong(): Song = Song(
         id = id,
@@ -37,6 +39,8 @@ data class SongEntity(
         youtubeVideoId = youtubeVideoId,
         youtubeOffsetMs = youtubeOffsetMs,
         youtubeBlocklist = decodeBlocklist(youtubeBlocklist),
+        songsterrId = songsterrId,
+        songsterrRevisionId = songsterrRevisionId,
     )
 
     companion object {
@@ -54,6 +58,8 @@ data class SongEntity(
             youtubeVideoId = s.youtubeVideoId,
             youtubeOffsetMs = s.youtubeOffsetMs,
             youtubeBlocklist = encodeBlocklist(s.youtubeBlocklist),
+            songsterrId = s.songsterrId,
+            songsterrRevisionId = s.songsterrRevisionId,
         )
 
         internal fun encodeBars(bars: List<List<List<DrumToken>>>): String =

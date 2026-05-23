@@ -11,7 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-@Database(entities = [SongEntity::class], version = 3, exportSchema = false)
+@Database(entities = [SongEntity::class], version = 4, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun songDao(): SongDao
@@ -32,9 +32,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v3 → v4: added songsterrId + songsterrRevisionId for Songsterr-sourced tabs. */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE songs ADD COLUMN songsterrId INTEGER")
+                db.execSQL("ALTER TABLE songs ADD COLUMN songsterrRevisionId TEXT")
+            }
+        }
+
         fun build(ctx: Context, scope: CoroutineScope): AppDatabase =
             Room.databaseBuilder(ctx, AppDatabase::class.java, "drums.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)

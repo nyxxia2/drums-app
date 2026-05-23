@@ -120,8 +120,8 @@ class AddSongViewModel @Inject constructor(
             importedFrom = ImportSource.BUNDLED, // semantics: app-added; Phase 4 can introduce a SONGSTERR enum value if needed
             lastPlayed = null,
             youtubeVideoId = null,
-            // songsterrId = result.songId,         // restored in Task 15
-            // songsterrRevisionId = revisionId.toString(),  // restored in Task 15
+            songsterrId = result.songId,
+            songsterrRevisionId = revisionId.toString(),
         )
         repo.upsertAll(listOf(song))
         _events.tryEmit(AddSongEvent.SongAdded(song.id))
