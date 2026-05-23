@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -96,8 +95,6 @@ fun UploadScreen(onBack: () -> Unit) {
         SourceRow(Icons.Filled.CameraAlt, true, "Take a photo", "Snap sheet music with your camera") { comingSoon() }
         Spacer(Modifier.height(8.dp))
         SourceRow(Icons.Filled.AttachFile, false, "Choose PDF or image", "Pick from your files") { comingSoon() }
-        Spacer(Modifier.height(8.dp))
-        SourceRow(Icons.Filled.LibraryMusic, false, "Connect Spotify", "Drum along to tracks you're playing") { comingSoon() }
     }
 }
 
