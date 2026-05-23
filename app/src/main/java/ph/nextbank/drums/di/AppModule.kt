@@ -9,7 +9,6 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import ph.nextbank.drums.audio.songsterr.DefaultDrumTabParser
 import ph.nextbank.drums.audio.songsterr.DrumTabParser
 import ph.nextbank.drums.audio.songsterr.OkHttpSongsterrSearchService
@@ -27,7 +26,6 @@ import ph.nextbank.drums.audio.DrumSampleBankApi
 import ph.nextbank.drums.audio.playback.YouTubeAdapter
 import ph.nextbank.drums.audio.playback.YouTubeAdapterFactory
 import ph.nextbank.drums.ui.player.ExoYouTubeAdapter
-import ph.nextbank.drums.data.samples.SAMPLE_SONGS
 import javax.inject.Singleton
 
 @Module
@@ -44,12 +42,7 @@ object AppModule {
     fun provideSongDao(db: AppDatabase): SongDao = db.songDao()
 
     @Provides @Singleton
-    fun provideSongRepository(dao: SongDao, scope: CoroutineScope): SongRepository {
-        val repo: SongRepository = RoomSongRepository(dao)
-        // Seed bundled songs on first launch only — preserves user-set youtubeVideoId / offset / blocklist on subsequent starts.
-        scope.launch { repo.seedNew(SAMPLE_SONGS) }
-        return repo
-    }
+    fun provideSongRepository(dao: SongDao): SongRepository = RoomSongRepository(dao)
 
     @Provides @Singleton
     fun provideDrumSampleBank(@ApplicationContext ctx: Context): DrumSampleBankApi = DrumSampleBank(ctx)

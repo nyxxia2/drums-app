@@ -179,7 +179,22 @@ private fun DrawScope.drawOpenHat(cx: Float, cy: Float, color: Color, s: Float) 
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true, backgroundColor = 0xFF131318)
 @Composable
 private fun DrumStaffPreview() {
-    val bars = ph.nextbank.drums.data.samples.SAMPLE_SONGS[0].bars.take(2)
+    val e: List<DrumToken> = emptyList()
+    fun hit(vararg t: DrumToken): List<DrumToken> = t.toList()
+    val bars = listOf(
+        listOf(
+            hit(DrumToken.KICK, DrumToken.CRASH), e, hit(DrumToken.HIHAT_CLOSED), e,
+            hit(DrumToken.SNARE, DrumToken.HIHAT_CLOSED), e, hit(DrumToken.HIHAT_CLOSED), e,
+            hit(DrumToken.KICK, DrumToken.HIHAT_CLOSED), e, hit(DrumToken.KICK, DrumToken.HIHAT_CLOSED), e,
+            hit(DrumToken.SNARE, DrumToken.HIHAT_CLOSED), e, hit(DrumToken.HIHAT_CLOSED), e,
+        ),
+        listOf(
+            hit(DrumToken.KICK, DrumToken.HIHAT_CLOSED), e, hit(DrumToken.HIHAT_CLOSED), e,
+            hit(DrumToken.SNARE, DrumToken.HIHAT_CLOSED), e, hit(DrumToken.HIHAT_CLOSED), e,
+            hit(DrumToken.KICK, DrumToken.HIHAT_CLOSED), e, hit(DrumToken.HIHAT_CLOSED), e,
+            hit(DrumToken.SNARE, DrumToken.HIHAT_CLOSED), e, hit(DrumToken.SNARE, DrumToken.HIHAT_CLOSED), e,
+        ),
+    )
     ph.nextbank.drums.ui.theme.DrumsTheme {
         DrumStaff(bars = bars, currentSlot = 11f, widthDp = 340, heightDp = 110)
     }
