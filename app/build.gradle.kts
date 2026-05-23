@@ -67,6 +67,7 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.room.testing)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(platform(libs.compose.bom))
