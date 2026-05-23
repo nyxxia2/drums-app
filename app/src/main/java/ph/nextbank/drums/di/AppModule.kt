@@ -10,6 +10,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import ph.nextbank.drums.audio.youtube.NewPipeYouTubeSearchService
+import ph.nextbank.drums.audio.youtube.YouTubeSearchService
 import ph.nextbank.drums.data.db.AppDatabase
 import ph.nextbank.drums.data.db.SongDao
 import ph.nextbank.drums.data.repo.SongRepository
@@ -42,4 +44,7 @@ object AppModule {
 
     @Provides @Singleton
     fun provideDrumSampleBank(@ApplicationContext ctx: Context): DrumSampleBank = DrumSampleBank(ctx)
+
+    @Provides @Singleton
+    fun provideYouTubeSearchService(): YouTubeSearchService = NewPipeYouTubeSearchService()
 }
