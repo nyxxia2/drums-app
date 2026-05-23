@@ -68,18 +68,18 @@ fun LibraryScreen(
     val filtered = remember(songs, tab) {
         when (tab) {
             "Recent" -> songs.filter { it.lastPlayed != null }
-            "Spotify" -> songs.filter { it.importedFrom == ImportSource.SPOTIFY }
+            "Bundled" -> songs.filter { it.importedFrom == ImportSource.BUNDLED }
             else -> songs
         }
     }
     val sectionLabel = when (tab) {
         "Recent" -> "RECENTLY PLAYED"
-        "Spotify" -> "FROM SPOTIFY"
+        "Bundled" -> "BUNDLED SONGS"
         else -> "ALL SONGS"
     }
     val emptyMessage = when (tab) {
         "Recent" -> "You haven't played any songs yet."
-        "Spotify" -> "Connect Spotify to see your tracks here."
+        "Bundled" -> "No bundled songs found."
         else -> "Tap the + button to add a song."
     }
 
@@ -107,7 +107,7 @@ fun LibraryScreen(
             Spacer(Modifier.height(14.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("All ${songs.size}", "Recent", "Spotify").forEach { label ->
+                listOf("All ${songs.size}", "Recent", "Bundled").forEach { label ->
                     val key = label.takeWhile { it != ' ' }
                     PillTab(label = label, active = tab == key, onClick = { tab = key })
                 }
