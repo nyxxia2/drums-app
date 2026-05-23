@@ -28,10 +28,14 @@ fun YouTubeEmbed(
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
+            // Per the lib docs, both `origin` and `rel` must be set on the iframe for
+            // many embed-restricted videos to play. The lib's default options omit them.
             val opts = IFramePlayerOptions.Builder()
-                .controls(0)
+                .controls(1)              // show YouTube controls (helps with some embed errors)
                 .fullscreen(0)
                 .autoplay(0)
+                .rel(0)
+                .ivLoadPolicy(3)
                 .build()
             YouTubePlayerView(ctx).apply {
                 enableAutomaticInitialization = false
@@ -63,6 +67,9 @@ fun YouTubeEmbed(
                         adapter.notifyError(error.name)
                     }
                 }, opts)
+                // Register the view itself as a lifecycle observer (lib pattern) — without
+                // this the iframe sometimes reports UNKNOWN errors on first init.
+                lifecycleOwner.lifecycle.addObserver(this)
                 onAdapterReady(adapter)
                 view.value = this
             }
@@ -76,7 +83,10 @@ fun YouTubeEmbed(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            view.value?.release()
+            view.value?.let {
+                lifecycleOwner.lifecycle.removeObserver(it)
+                it.release()
+            }
         }
     }
 }
