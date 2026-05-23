@@ -24,7 +24,13 @@ fun NavGraph() {
             )
         }
         composable(Route.Upload.path) {
-            AddSongScreen(onBack = { nav.popBackStack() })
+            AddSongScreen(
+                onBack = { nav.popBackStack() },
+                onSongAdded = { id ->
+                    nav.popBackStack()  // close AddSong screen
+                    nav.navigate(Route.Player(id).path)
+                },
+            )
         }
         composable(
             Route.Player.PATH,

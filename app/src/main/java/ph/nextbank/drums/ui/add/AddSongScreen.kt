@@ -22,13 +22,16 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import android.widget.Toast
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.TextStyle
@@ -42,9 +45,20 @@ import ph.nextbank.drums.ui.theme.DrumsType
 @Composable
 fun AddSongScreen(
     onBack: () -> Unit,
+    onSongAdded: (String) -> Unit,
     vm: AddSongViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
+    val ctx = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        vm.events.collect { ev ->
+            when (ev) {
+                is AddSongEvent.Toast -> Toast.makeText(ctx, ev.message, Toast.LENGTH_SHORT).show()
+                is AddSongEvent.SongAdded -> onSongAdded(ev.songId)
+            }
+        }
+    }
 
     Column(
         Modifier
@@ -105,7 +119,11 @@ fun AddSongScreen(
         } else {
             LazyColumn(modifier = Modifier.fillMaxWidth()) {
                 items(state.results, key = { it.songId }) { result ->
-                    SongsterrResultRow(result) { vm.onResultClicked(result) }
+                    SongsterrResultRow(
+                        result = result,
+                        enabled = !state.isAdding,
+                        onClick = { vm.onResultClicked(result) },
+                    )
                     Spacer(Modifier.height(8.dp))
                 }
             }
@@ -114,7 +132,7 @@ fun AddSongScreen(
 }
 
 @Composable
-private fun SongsterrResultRow(result: SongsterrResult, onClick: () -> Unit) {
+private fun SongsterrResultRow(result: SongsterrResult, enabled: Boolean, onClick: () -> Unit) {
     val hasDrums = result.popularTrackDrum != null
     Row(
         modifier = Modifier
@@ -122,7 +140,7 @@ private fun SongsterrResultRow(result: SongsterrResult, onClick: () -> Unit) {
             .clip(RoundedCornerShape(14.dp))
             .background(DrumsColors.Surface)
             .border(1.dp, DrumsColors.Line, RoundedCornerShape(14.dp))
-            .clickable(enabled = hasDrums, onClick = onClick)
+            .clickable(enabled = hasDrums && enabled, onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
