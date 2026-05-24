@@ -2518,9 +2518,11 @@ Expected: no toasts about errors, no crashes, audio plays in sync with the staff
 
 1. Tap `+` again.
 2. Search "asdf asdf asdf zzz". Wait.
-3. Either "No results." appears, OR results all show "no drum tab" in dim text.
+3. Either "No results." appears, OR results show a mix — some clickable, some with "· no drum tab" in dim text.
 
-Pick a "no drum tab" result if any exist — should toast "This song doesn't have a drum tab on Songsterr." and stay on the screen.
+For any row labeled "no drum tab": confirm it's visually dim and tapping it does nothing (rows are disabled in the UI — `AddSongScreen.kt:164` gates `.clickable` on `hasDrums`). Stay on the screen.
+
+For a clickable row whose fetch turns out to have no drum track (a rarer case than no-drum-tab-in-search), the `AddSongViewModel` still emits the "This song doesn't have a drum tab on Songsterr." toast — covered by unit tests, not exercised here.
 
 - [ ] **Step 4: Run the full unit-test suite as a final regression**
 
