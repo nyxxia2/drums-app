@@ -2,6 +2,9 @@ package ph.nextbank.drums.data.db
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import ph.nextbank.drums.audio.songsterr.VideoPointEntry
 import ph.nextbank.drums.data.model.DrumToken
 import ph.nextbank.drums.data.model.ImportSource
 import ph.nextbank.drums.data.model.Song
@@ -25,6 +28,7 @@ data class SongEntity(
     val youtubeBlocklist: String,
     val songsterrId: Long?,
     val songsterrRevisionId: String?,
+    val videoPointsJson: String?,
 ) {
     fun toSong(): Song = Song(
         id = id,
@@ -41,6 +45,7 @@ data class SongEntity(
         youtubeBlocklist = decodeBlocklist(youtubeBlocklist),
         songsterrId = songsterrId,
         songsterrRevisionId = songsterrRevisionId,
+        videoPoints = decodeVideoPoints(videoPointsJson),
     )
 
     companion object {
@@ -60,6 +65,7 @@ data class SongEntity(
             youtubeBlocklist = encodeBlocklist(s.youtubeBlocklist),
             songsterrId = s.songsterrId,
             songsterrRevisionId = s.songsterrRevisionId,
+            videoPointsJson = encodeVideoPoints(s.videoPoints),
         )
 
         internal fun encodeBars(bars: List<List<List<DrumToken>>>): String =
@@ -78,5 +84,13 @@ data class SongEntity(
         internal fun encodeBlocklist(ids: List<String>): String = ids.joinToString(",")
         internal fun decodeBlocklist(s: String): List<String> =
             if (s.isEmpty()) emptyList() else s.split(",")
+
+        private val videoPointsJson = Json { ignoreUnknownKeys = true }
+
+        internal fun encodeVideoPoints(entries: List<VideoPointEntry>?): String? =
+            entries?.let { videoPointsJson.encodeToString(it) }
+
+        internal fun decodeVideoPoints(s: String?): List<VideoPointEntry>? =
+            s?.let { runCatching { videoPointsJson.decodeFromString<List<VideoPointEntry>>(it) }.getOrNull() }
     }
 }

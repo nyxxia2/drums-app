@@ -26,6 +26,12 @@ data class Song(
     val songsterrId: Long? = null,
     /** Songsterr revisionId for re-fetching. null for legacy / bundled songs. */
     val songsterrRevisionId: String? = null,
+    /**
+     * Songsterr-curated YouTube videos with per-bar sync timestamps. null = no
+     * sync data available; the player falls back to legacy YouTube search and
+     * constant-BPM playback.
+     */
+    val videoPoints: List<ph.nextbank.drums.audio.songsterr.VideoPointEntry>? = null,
 ) {
     val totalBars: Int get() = bars.size
     val slotsPerBar: Int get() = bars.firstOrNull()?.size ?: 16
