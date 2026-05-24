@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import ph.nextbank.drums.audio.ConstantBpmTimeMap
 
 class YouTubePlaybackSourceTest {
 
@@ -11,9 +12,7 @@ class YouTubePlaybackSourceTest {
     fun `slot computed from currentSecond using bpm and offset`() = runTest {
         val fake = FakeYouTubeAdapter()
         val source = YouTubePlaybackSource(
-            songBpm = 120,
-            slotsPerBeat = 4,
-            totalSlots = 128,
+            timeMap = ConstantBpmTimeMap(bpm = 120, totalSlots = 128, slotsPerBeat = 4),
             adapter = fake,
             initialOffsetMs = 0,
         )
@@ -27,9 +26,7 @@ class YouTubePlaybackSourceTest {
     fun `positive offset shifts video earlier — slot is larger at the same currentSecond`() = runTest {
         val fake = FakeYouTubeAdapter()
         val source = YouTubePlaybackSource(
-            songBpm = 120,
-            slotsPerBeat = 4,
-            totalSlots = 128,
+            timeMap = ConstantBpmTimeMap(bpm = 120, totalSlots = 128, slotsPerBeat = 4),
             adapter = fake,
             initialOffsetMs = 250,
         )
@@ -42,7 +39,11 @@ class YouTubePlaybackSourceTest {
     @Test
     fun `onReady transitions Idle to Ready`() = runTest {
         val fake = FakeYouTubeAdapter()
-        val source = YouTubePlaybackSource(120, 4, 128, fake, 0)
+        val source = YouTubePlaybackSource(
+            timeMap = ConstantBpmTimeMap(bpm = 120, totalSlots = 128, slotsPerBeat = 4),
+            adapter = fake,
+            initialOffsetMs = 0,
+        )
         assertEquals(PlaybackState.Idle, source.state.first())
         fake.simulateReady()
         assertEquals(PlaybackState.Ready, source.state.first())
@@ -51,7 +52,11 @@ class YouTubePlaybackSourceTest {
     @Test
     fun `play calls adapter play and transitions to Playing on onPlay`() = runTest {
         val fake = FakeYouTubeAdapter()
-        val source = YouTubePlaybackSource(120, 4, 128, fake, 0)
+        val source = YouTubePlaybackSource(
+            timeMap = ConstantBpmTimeMap(bpm = 120, totalSlots = 128, slotsPerBeat = 4),
+            adapter = fake,
+            initialOffsetMs = 0,
+        )
         fake.simulateReady()
         source.play()
         assertEquals(1, fake.playCalls.size)
@@ -62,7 +67,11 @@ class YouTubePlaybackSourceTest {
     @Test
     fun `onEnded transitions to Finished`() = runTest {
         val fake = FakeYouTubeAdapter()
-        val source = YouTubePlaybackSource(120, 4, 128, fake, 0)
+        val source = YouTubePlaybackSource(
+            timeMap = ConstantBpmTimeMap(bpm = 120, totalSlots = 128, slotsPerBeat = 4),
+            adapter = fake,
+            initialOffsetMs = 0,
+        )
         fake.simulateReady()
         source.play()
         fake.simulatePlay()
@@ -73,7 +82,11 @@ class YouTubePlaybackSourceTest {
     @Test
     fun `onError transitions to Error`() = runTest {
         val fake = FakeYouTubeAdapter()
-        val source = YouTubePlaybackSource(120, 4, 128, fake, 0)
+        val source = YouTubePlaybackSource(
+            timeMap = ConstantBpmTimeMap(bpm = 120, totalSlots = 128, slotsPerBeat = 4),
+            adapter = fake,
+            initialOffsetMs = 0,
+        )
         fake.simulateError("video unavailable")
         assertEquals(PlaybackState.Error, source.state.first())
     }
@@ -81,7 +94,11 @@ class YouTubePlaybackSourceTest {
     @Test
     fun `nudgeOffset adjusts the slot derivation on next onCurrentSecond`() = runTest {
         val fake = FakeYouTubeAdapter()
-        val source = YouTubePlaybackSource(120, 4, 128, fake, 0)
+        val source = YouTubePlaybackSource(
+            timeMap = ConstantBpmTimeMap(bpm = 120, totalSlots = 128, slotsPerBeat = 4),
+            adapter = fake,
+            initialOffsetMs = 0,
+        )
         fake.simulateReady()
         fake.simulatePlay()
         fake.simulateSecond(1.0f)
@@ -94,7 +111,11 @@ class YouTubePlaybackSourceTest {
     @Test
     fun `activeSlotIndex is currentSlot truncated to int`() = runTest {
         val fake = FakeYouTubeAdapter()
-        val source = YouTubePlaybackSource(120, 4, 128, fake, 0)
+        val source = YouTubePlaybackSource(
+            timeMap = ConstantBpmTimeMap(bpm = 120, totalSlots = 128, slotsPerBeat = 4),
+            adapter = fake,
+            initialOffsetMs = 0,
+        )
         fake.simulateReady()
         fake.simulatePlay()
         fake.simulateSecond(1.07f)

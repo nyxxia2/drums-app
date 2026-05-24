@@ -3,6 +3,7 @@ package ph.nextbank.drums.audio.playback
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import ph.nextbank.drums.audio.TimeMap
 
 interface YouTubeAdapter {
     fun play()
@@ -24,9 +25,7 @@ interface YouTubeAdapterListener {
 }
 
 class YouTubePlaybackSource(
-    private val songBpm: Int,
-    private val slotsPerBeat: Int,
-    private val totalSlots: Int,
+    private val timeMap: TimeMap,
     private val adapter: YouTubeAdapter,
     initialOffsetMs: Int,
 ) : PlaybackSource {
@@ -47,8 +46,6 @@ class YouTubePlaybackSource(
     var lastErrorMessage: String? = null
         private set
 
-    private val msPerSlot: Float = (60_000f / songBpm) / slotsPerBeat
-
     init {
         adapter.setListener(object : YouTubeAdapterListener {
             override fun onReady() {
@@ -64,9 +61,9 @@ class YouTubePlaybackSource(
                 _state.value = PlaybackState.Error
             }
             override fun onCurrentSecond(seconds: Float) {
-                val effectiveMs = seconds * 1000f + offsetMs
-                val slot = effectiveMs / msPerSlot
-                val clamped = slot.coerceIn(0f, totalSlots.toFloat() - 0.001f)
+                val effectiveSec = seconds + offsetMs / 1000f
+                val slot = timeMap.slotAt(effectiveSec)
+                val clamped = slot.coerceIn(0f, timeMap.totalSlots.toFloat() - 0.001f)
                 _currentSlot.value = clamped
                 _activeSlotIndex.value = clamped.toInt()
             }
