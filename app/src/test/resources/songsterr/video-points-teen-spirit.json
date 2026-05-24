@@ -1,0 +1,47 @@
+[
+  {
+    "id": 3469811,
+    "revisionToVideoId": 9535937,
+    "songId": 269,
+    "revisionId": 6953431,
+    "videoId": "zYxkezUr8MQ",
+    "feature": "alternative",
+    "points": [-0.15, 2.5, 4.68, 6.86, 8.95],
+    "status": "done",
+    "problematic": false,
+    "countries": [],
+    "alternativeVideos": [],
+    "trackHashes": [],
+    "tracks": []
+  },
+  {
+    "id": 3470000,
+    "revisionToVideoId": 9536000,
+    "songId": 269,
+    "revisionId": 6953431,
+    "videoId": "y_z4ycssv54",
+    "feature": "solo",
+    "points": [0.56, 3.2, 5.39, 7.5, 9.6],
+    "status": "done",
+    "problematic": false,
+    "countries": [],
+    "alternativeVideos": [],
+    "trackHashes": [],
+    "tracks": []
+  },
+  {
+    "id": 3470001,
+    "revisionToVideoId": 9536001,
+    "songId": 269,
+    "revisionId": 6953431,
+    "videoId": "H6mdnPOpcaU",
+    "feature": null,
+    "points": [40.34, 42.99, 45.17, 47.3, 49.4],
+    "status": "done",
+    "problematic": false,
+    "countries": [],
+    "alternativeVideos": [],
+    "trackHashes": [],
+    "tracks": []
+  }
+]
