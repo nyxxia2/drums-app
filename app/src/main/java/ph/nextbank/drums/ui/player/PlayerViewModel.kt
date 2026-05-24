@@ -69,6 +69,8 @@ class PlayerViewModel @Inject constructor(
     private val sourceJobs = mutableListOf<Job>()
     /** Counts how many videos we've tried for this song since open. Bounded to avoid loops. */
     private var extractionAttempts = 0
+    /** Index into song.videoPoints!! of the currently-displayed candidate. */
+    private var syncedCandidateIdx: Int = 0
 
     init {
         viewModelScope.launch {
@@ -78,12 +80,32 @@ class PlayerViewModel @Inject constructor(
                 youtubeOffsetMs = s.youtubeOffsetMs,
             )
             val cachedId = s.youtubeVideoId
-            if (cachedId != null) {
-                startYouTubePlayback(cachedId)
-            } else {
-                runSearch(s, s.youtubeBlocklist.toSet())
+            val syncedEntries = s.videoPoints
+            when {
+                cachedId != null -> startYouTubePlayback(cachedId)
+                !syncedEntries.isNullOrEmpty() -> showSyncedCandidate(s, idx = 0)
+                else -> runSearch(s, s.youtubeBlocklist.toSet())
             }
         }
+    }
+
+    private suspend fun showSyncedCandidate(song: Song, idx: Int) {
+        val entries = song.videoPoints ?: return
+        if (idx !in entries.indices) {
+            // Exhausted — fall through to legacy YouTube search.
+            _events.tryEmit(PlayerEvent.Toast("No more synced videos — searching YouTube."))
+            runSearch(song, song.youtubeBlocklist.toSet())
+            return
+        }
+        syncedCandidateIdx = idx
+        _state.value = _state.value.copy(phase = PlayerPhase.Searching)
+        val meta = searchService.fetchMeta(entries[idx].youtubeVideoId)
+        if (meta == null) {
+            // Skip and try the next one.
+            showSyncedCandidate(song, idx + 1)
+            return
+        }
+        _state.value = _state.value.copy(phase = PlayerPhase.Confirming(meta))
     }
 
     private suspend fun runSearch(song: Song, blocklist: Set<String>, autoAccept: Boolean = false) {

@@ -17,6 +17,7 @@ import ph.nextbank.drums.audio.FakeDrumSampleBank
 import ph.nextbank.drums.audio.playback.FakeYouTubeAdapter
 import ph.nextbank.drums.audio.playback.YouTubeAdapter
 import ph.nextbank.drums.audio.playback.YouTubeAdapterFactory
+import ph.nextbank.drums.audio.songsterr.VideoPointEntry
 import ph.nextbank.drums.audio.youtube.FakeYouTubeSearchService
 import ph.nextbank.drums.audio.youtube.SearchResult
 import ph.nextbank.drums.data.model.DrumToken
@@ -46,6 +47,7 @@ class PlayerViewModelTest {
     private fun songWithoutVideo(
         id: String = "test1",
         blocklist: List<String> = emptyList(),
+        videoPoints: List<VideoPointEntry>? = null,
     ) = Song(
         id = id,
         title = "Test Song",
@@ -57,6 +59,7 @@ class PlayerViewModelTest {
         importedFrom = ImportSource.BUNDLED,
         lastPlayed = null,
         youtubeBlocklist = blocklist,
+        videoPoints = videoPoints,
     )
 
     private fun mkVm(
@@ -217,5 +220,36 @@ class PlayerViewModelTest {
         vm.nudgeOffset(50)
         advanceUntilIdle()
         assertEquals(100, repo.snapshot("test1")!!.youtubeOffsetMs)
+    }
+
+    @Test
+    fun `synced song shows Confirming with first entry without searching`() = runTest {
+        val entries = listOf(
+            VideoPointEntry(
+                youtubeVideoId = "syncedAbc12",
+                points = listOf(0.0, 2.0, 4.0, 6.0),
+                feature = "alternative",
+            ),
+        )
+        val song = songWithoutVideo(id = "song1", videoPoints = entries)
+        val repo = FakeSongRepository().apply { seed(song) }
+        val search = FakeYouTubeSearchService().apply {
+            metaResults = mapOf(
+                "syncedAbc12" to SearchResult(
+                    videoId = "syncedAbc12",
+                    title = "Synced Video Title",
+                    channelTitle = "Channel",
+                    durationSec = 240,
+                    thumbnailUrl = "https://example/thumb.jpg",
+                ),
+            )
+        }
+        val vm = mkVm(repo, search, songId = "song1")
+        advanceUntilIdle()
+
+        val phase = vm.state.value.phase
+        assertTrue("expected Confirming, got $phase", phase is PlayerPhase.Confirming)
+        assertEquals("syncedAbc12", (phase as PlayerPhase.Confirming).candidate.videoId)
+        assertEquals(0, search.findForCalls)  // legacy path NOT taken.
     }
 }

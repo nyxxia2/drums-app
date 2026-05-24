@@ -13,7 +13,10 @@ class FakeYouTubeSearchService : YouTubeSearchService {
     /** Maps videoId -> SearchResult the fake will return from fetchMeta. */
     var metaResults: Map<String, SearchResult> = emptyMap()
 
+    var findForCalls: Int = 0
+
     override suspend fun findFor(query: String, blocklist: Set<String>): SearchResult? {
+        findForCalls++
         lastQuery = query
         lastBlocklist = blocklist
         if (shouldReturnNull) return null
