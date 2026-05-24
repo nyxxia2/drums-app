@@ -6,6 +6,8 @@ class FakeYouTubeSearchService : YouTubeSearchService {
     var lastQuery: String? = null
     var lastBlocklist: Set<String> = emptySet()
     var shouldReturnNull: Boolean = false
+    /** When non-null, both findFor and fetchMeta throw this. Used to simulate network failure. */
+    var throwOnCall: Throwable? = null
 
     /** Maps videoId -> audio URL the fake will return. */
     var audioUrls: Map<String, String> = emptyMap()
@@ -22,6 +24,7 @@ class FakeYouTubeSearchService : YouTubeSearchService {
     var findForCalls: Int = 0
 
     override suspend fun findFor(query: String, blocklist: Set<String>): SearchResult? {
+        throwOnCall?.let { throw it }
         findForCalls++
         lastQuery = query
         lastBlocklist = blocklist
@@ -33,5 +36,8 @@ class FakeYouTubeSearchService : YouTubeSearchService {
         if (streamUrlForVideoId.containsKey(videoId)) streamUrlForVideoId[videoId]
         else audioUrls[videoId]
 
-    override suspend fun fetchMeta(videoId: String): SearchResult? = metaResults[videoId]
+    override suspend fun fetchMeta(videoId: String): SearchResult? {
+        throwOnCall?.let { throw it }
+        return metaResults[videoId]
+    }
 }

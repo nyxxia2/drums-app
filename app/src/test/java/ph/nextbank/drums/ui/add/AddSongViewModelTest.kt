@@ -30,6 +30,7 @@ import ph.nextbank.drums.audio.youtube.SearchResult
 import ph.nextbank.drums.audio.youtube.YouTubeCandidateResolver
 import ph.nextbank.drums.data.model.DrumToken
 import ph.nextbank.drums.data.repo.FakeSongRepository
+import java.io.IOException
 
 class AddSongViewModelTest {
 
@@ -237,6 +238,25 @@ class AddSongViewModelTest {
         val added = events.filterIsInstance<AddSongEvent.SongAdded>().firstOrNull()
         assertNotNull(added)
         assertEquals(savedId, added!!.songId)
+    }
+
+    @Test fun `IOException during YouTube resolve surfaces connection toast`() = runTest {
+        val youtubeSearch = FakeYouTubeSearchService().apply {
+            throwOnCall = IOException("offline")
+        }
+        val (vm, repo, _, _) = mkVm(youtubeSearch = youtubeSearch)
+        vm.onResultClicked(sampleResult)
+        advanceUntilIdle()
+
+        assertTrue(repo.allSnapshot().isEmpty())
+        assertNull(vm.state.first().pendingConfirm)
+        assertEquals(false, vm.state.first().isAdding)
+        val ev = vm.events.replayCache.firstOrNull() ?: vm.events.first()
+        assertTrue(ev is AddSongEvent.Toast)
+        assertTrue(
+            "toast: ${(ev as AddSongEvent.Toast).message}",
+            ev.message.contains("connection", ignoreCase = true),
+        )
     }
 
     @Test fun `dismiss after confirm does not undo the persist`() = runTest {

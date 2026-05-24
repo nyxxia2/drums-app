@@ -25,6 +25,7 @@ import ph.nextbank.drums.audio.youtube.YouTubeCandidateResolver
 import ph.nextbank.drums.data.model.ImportSource
 import ph.nextbank.drums.data.model.Song
 import ph.nextbank.drums.data.repo.SongRepository
+import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
 
@@ -92,10 +93,11 @@ class AddSongViewModel @Inject constructor(
                     else -> emptyList()
                 }
                 handleFetchResult(result, fetched, points)
-            }.getOrElse {
-                _events.tryEmit(AddSongEvent.Toast("Couldn't load tab — try a different result"))
-                _state.value = _state.value.copy(isAdding = false)
-            }
+            }.getOrElse { t ->
+            val msg = if (t is IOException) "Check your connection." else "Couldn't load tab — try a different result"
+            _events.tryEmit(AddSongEvent.Toast(msg))
+            _state.value = _state.value.copy(isAdding = false)
+        }
         }
     }
 
