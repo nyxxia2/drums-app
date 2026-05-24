@@ -20,6 +20,7 @@ import ph.nextbank.drums.audio.playback.SyntheticPlaybackSource
 import ph.nextbank.drums.audio.playback.YouTubeAdapterFactory
 import ph.nextbank.drums.audio.playback.YouTubePlaybackSource
 import ph.nextbank.drums.audio.youtube.SearchResult
+import ph.nextbank.drums.audio.youtube.YouTubeCandidateResolver
 import ph.nextbank.drums.audio.youtube.YouTubeSearchService
 import ph.nextbank.drums.data.model.Song
 import ph.nextbank.drums.data.repo.SongRepository
@@ -54,6 +55,7 @@ class PlayerViewModel @Inject constructor(
     private val repo: SongRepository,
     private val bank: DrumSampleBankApi,
     private val searchService: YouTubeSearchService,
+    private val resolver: YouTubeCandidateResolver,
     private val adapterFactory: YouTubeAdapterFactory,
     handle: SavedStateHandle,
 ) : ViewModel() {
@@ -113,8 +115,12 @@ class PlayerViewModel @Inject constructor(
 
     private suspend fun runSearch(song: Song, blocklist: Set<String>, autoAccept: Boolean = false) {
         _state.value = _state.value.copy(phase = PlayerPhase.Searching)
-        val query = "${song.title} ${song.artist}"
-        val result = searchService.findFor(query, blocklist)
+        val result = resolver.resolveInitial(
+            title = song.title,
+            artist = song.artist,
+            videoPoints = null,
+            blocklist = blocklist,
+        )
         if (result == null) {
             _events.tryEmit(PlayerEvent.Toast("No playable YouTube result — playing synth drums"))
             switchToSynth()

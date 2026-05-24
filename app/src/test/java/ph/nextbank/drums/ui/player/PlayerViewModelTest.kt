@@ -20,6 +20,7 @@ import ph.nextbank.drums.audio.playback.YouTubeAdapterFactory
 import ph.nextbank.drums.audio.songsterr.VideoPointEntry
 import ph.nextbank.drums.audio.youtube.FakeYouTubeSearchService
 import ph.nextbank.drums.audio.youtube.SearchResult
+import ph.nextbank.drums.audio.youtube.YouTubeCandidateResolver
 import ph.nextbank.drums.data.model.DrumToken
 import ph.nextbank.drums.data.model.ImportSource
 import ph.nextbank.drums.data.model.Song
@@ -82,6 +83,7 @@ class PlayerViewModelTest {
         repo = repo,
         bank = FakeDrumSampleBank(),
         searchService = search,
+        resolver = YouTubeCandidateResolver(search),
         adapterFactory = adapterFactory,
         handle = SavedStateHandle(mapOf("songId" to songId)),
     )
