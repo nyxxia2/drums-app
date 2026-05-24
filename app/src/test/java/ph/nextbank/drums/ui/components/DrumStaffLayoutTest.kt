@@ -70,4 +70,27 @@ class DrumStaffLayoutTest {
         val beams = l.beamGroups(stems)
         assertEquals(0, beams.size)
     }
+
+    @Test fun bar_width_unchanged_for_songs_under_threshold() {
+        // 100 bars * 380 = 38000 dp, below the 50000 cap.
+        assertEquals(380, DrumStaffLayout.computeBarWidthDp(barCount = 100))
+    }
+
+    @Test fun bar_width_scales_down_for_long_songs() {
+        // 418 bars (Master of Puppets) at 380 dp/bar = 158840 dp — exceeds the 262143 px
+        // Compose Constraints limit at 480 dpi. Scaled to fit under 50000 dp total.
+        val w = DrumStaffLayout.computeBarWidthDp(barCount = 418)
+        assertEquals(50_000 / 418, w)
+        assertTrue("scaled total stays under cap", w.toLong() * 418 <= 50_000)
+    }
+
+    @Test fun bar_width_does_not_collapse_below_minimum() {
+        // Pathological song with 10000 bars — 50000/10000=5, but we floor at 40.
+        assertEquals(40, DrumStaffLayout.computeBarWidthDp(barCount = 10_000))
+    }
+
+    @Test fun bar_width_handles_zero_bars() {
+        // Defensive: empty bar list shouldn't divide by zero.
+        assertEquals(380, DrumStaffLayout.computeBarWidthDp(barCount = 0))
+    }
 }

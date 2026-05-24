@@ -110,5 +110,22 @@ class DrumStaffLayout(
         private val MID_ROW = setOf(
             DrumToken.SNARE, DrumToken.TOM_HI, DrumToken.TOM_MID, DrumToken.TOM_FLOOR
         )
+
+        /**
+         * Compose's bit-packed Constraints can't represent dimensions above ~262k px. With the
+         * preferred 380 dp/bar and a 480 dpi device (3 px/dp), that limit is hit at ~229 bars.
+         * Long songs like Metallica's Master of Puppets blow past it and crash measurement.
+         * Cap the total staff width and scale `barWidthDp` down proportionally so the staff
+         * still lays out, with a floor so notes don't collapse to zero width.
+         */
+        const val MAX_TOTAL_STAFF_WIDTH_DP = 50_000
+        const val MIN_BAR_WIDTH_DP = 40
+
+        fun computeBarWidthDp(barCount: Int, preferredBarWidthDp: Int = 380): Int {
+            if (barCount <= 0) return preferredBarWidthDp
+            val unscaled = preferredBarWidthDp.toLong() * barCount
+            if (unscaled <= MAX_TOTAL_STAFF_WIDTH_DP) return preferredBarWidthDp
+            return (MAX_TOTAL_STAFF_WIDTH_DP / barCount).coerceAtLeast(MIN_BAR_WIDTH_DP)
+        }
     }
 }

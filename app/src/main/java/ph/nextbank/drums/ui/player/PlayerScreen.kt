@@ -56,6 +56,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import ph.nextbank.drums.audio.playback.PlaybackState
 import ph.nextbank.drums.ui.components.DrumHitChips
 import ph.nextbank.drums.ui.components.DrumStaff
+import ph.nextbank.drums.ui.components.DrumStaffLayout
 import ph.nextbank.drums.ui.components.TransportButton
 import ph.nextbank.drums.ui.components.TransportStyle
 import ph.nextbank.drums.ui.theme.DrumsColors
@@ -172,10 +173,10 @@ private fun HeaderRow(
 @Composable
 private fun StaffArea(state: PlayerUiState, song: ph.nextbank.drums.data.model.Song) {
     val density = LocalDensity.current
-    val barWidthDp = 380
     val playheadXDp = 140
     val staffHeightDp = 280
     val barCount = song.bars.size
+    val barWidthDp = DrumStaffLayout.computeBarWidthDp(barCount)
     val totalWidthDp = barWidthDp * barCount
     val slotsTotal = barCount * song.slotsPerBar
     val clefWPx = with(density) { 32.dp.toPx() }
