@@ -238,6 +238,26 @@ class AddSongViewModelTest {
         assertNotNull(added)
         assertEquals(savedId, added!!.songId)
     }
+
+    @Test fun `dismiss after confirm does not undo the persist`() = runTest {
+        val (vm, repo, _, _) = mkVm()
+        vm.onResultClicked(sampleResult)
+        advanceUntilIdle()
+        assertNotNull(vm.state.first().pendingConfirm)
+
+        // User taps Confirm — pendingConfirm should clear synchronously.
+        vm.confirmPendingAdd()
+        assertNull(vm.state.first().pendingConfirm)
+
+        // User taps Dismiss before the upsert coroutine finishes — must be a no-op.
+        vm.dismissPendingAdd()
+        advanceUntilIdle()
+
+        // Song should still be persisted; SongAdded event should still have fired.
+        assertEquals(1, repo.allSnapshot().size)
+        val added = vm.events.replayCache.filterIsInstance<AddSongEvent.SongAdded>().firstOrNull()
+        assertNotNull(added)
+    }
 }
 
 private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)

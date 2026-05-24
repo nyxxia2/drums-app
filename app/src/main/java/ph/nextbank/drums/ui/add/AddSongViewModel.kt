@@ -101,10 +101,12 @@ class AddSongViewModel @Inject constructor(
 
     fun confirmPendingAdd() {
         val pending = _state.value.pendingConfirm ?: return
+        // Clear pendingConfirm synchronously so a subsequent dismiss can't race with the upsert.
+        _state.value = _state.value.copy(pendingConfirm = null)
         val song = pending.songTemplate.copy(youtubeVideoId = pending.candidate.videoId)
         viewModelScope.launch {
             repo.upsertAll(listOf(song))
-            _state.value = _state.value.copy(pendingConfirm = null, isAdding = false)
+            _state.value = _state.value.copy(isAdding = false)
             _events.tryEmit(AddSongEvent.SongAdded(song.id))
         }
     }
