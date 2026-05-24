@@ -10,6 +10,9 @@ class FakeYouTubeSearchService : YouTubeSearchService {
     /** Maps videoId -> audio URL the fake will return. */
     var audioUrls: Map<String, String> = emptyMap()
 
+    /** Maps videoId -> SearchResult the fake will return from fetchMeta. */
+    var metaResults: Map<String, SearchResult> = emptyMap()
+
     override suspend fun findFor(query: String, blocklist: Set<String>): SearchResult? {
         lastQuery = query
         lastBlocklist = blocklist
@@ -18,4 +21,6 @@ class FakeYouTubeSearchService : YouTubeSearchService {
     }
 
     override suspend fun getAudioStreamUrl(videoId: String): String? = audioUrls[videoId]
+
+    override suspend fun fetchMeta(videoId: String): SearchResult? = metaResults[videoId]
 }

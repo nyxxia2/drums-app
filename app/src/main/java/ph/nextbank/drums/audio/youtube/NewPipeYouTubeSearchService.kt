@@ -96,6 +96,21 @@ class NewPipeYouTubeSearchService(
                 .getOrNull()
         }
 
+    override suspend fun fetchMeta(videoId: String): SearchResult? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val watchUrl = "https://www.youtube.com/watch?v=$videoId"
+                val info = StreamInfo.getInfo(ServiceList.YouTube, watchUrl)
+                SearchResult(
+                    videoId = videoId,
+                    title = info.name ?: "",
+                    channelTitle = info.uploaderName ?: "",
+                    durationSec = info.duration.toInt(),
+                    thumbnailUrl = info.thumbnails?.firstOrNull()?.url ?: "",
+                )
+            }.getOrNull()
+        }
+
     /** Extract the 11-char video ID from a YouTube URL like https://www.youtube.com/watch?v=XXXXXXXXXXX. */
     private fun extractVideoId(url: String): String? {
         val regex = Regex("""[?&]v=([A-Za-z0-9_-]{11})""")

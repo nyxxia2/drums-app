@@ -3,6 +3,7 @@ package ph.nextbank.drums.data.repo
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import ph.nextbank.drums.audio.songsterr.VideoPointEntry
 import ph.nextbank.drums.data.model.Song
 
 class FakeSongRepository : SongRepository {
@@ -32,5 +33,8 @@ class FakeSongRepository : SongRepository {
     }
     override suspend fun updateYoutubeBlocklist(id: String, blocklist: List<String>) {
         songs.value = songs.value + (id to songs.value[id]!!.copy(youtubeBlocklist = blocklist))
+    }
+    override suspend fun updateVideoPoints(id: String, entries: List<VideoPointEntry>?) {
+        songs.value = songs.value + (id to songs.value[id]!!.copy(videoPoints = entries))
     }
 }

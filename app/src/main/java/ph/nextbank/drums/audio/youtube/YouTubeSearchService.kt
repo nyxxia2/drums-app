@@ -14,6 +14,14 @@ interface YouTubeSearchService {
      * fresh each time. Returns null on extraction failure.
      */
     suspend fun getAudioStreamUrl(videoId: String): String?
+
+    /**
+     * Look up title / channel / duration / thumbnail for [videoId]. Used when
+     * the videoId came from somewhere other than search (e.g. Songsterr's
+     * video-points list) but we still want to render the Confirming dialog
+     * with familiar metadata. Returns null on extraction failure.
+     */
+    suspend fun fetchMeta(videoId: String): SearchResult?
 }
 
 data class SearchResult(
