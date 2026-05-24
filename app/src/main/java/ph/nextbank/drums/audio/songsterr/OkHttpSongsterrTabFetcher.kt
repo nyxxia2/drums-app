@@ -16,12 +16,19 @@ import java.io.IOException
 
 private const val TAG = "DrumsSgs"
 private const val DEFAULT_META_BASE_URL = "https://www.songsterr.com"
-private const val DEFAULT_CDN_BASE_URL = "https://dqsljvtekg760.cloudfront.net"
+// Songsterr serves track-data from multiple CloudFront distributions. Modern
+// tabs (image slug prefix v0-) live on d3d3l6a6rcgkaf; legacy tabs (v5-) on
+// dqsljvtekg760. The slug-prefix correlation isn't documented, so we just
+// try each host in order until one returns 2xx.
+private val DEFAULT_CDN_BASE_URLS = listOf(
+    "https://d3d3l6a6rcgkaf.cloudfront.net",
+    "https://dqsljvtekg760.cloudfront.net",
+)
 
 class OkHttpSongsterrTabFetcher(
     private val client: OkHttpClient = OkHttpClient(),
     private val metaBaseUrl: String = DEFAULT_META_BASE_URL,
-    private val cdnBaseUrl: String = DEFAULT_CDN_BASE_URL,
+    private val cdnBaseUrls: List<String> = DEFAULT_CDN_BASE_URLS,
 ) : SongsterrTabFetcher {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -64,13 +71,25 @@ class OkHttpSongsterrTabFetcher(
                 ?: return@withContext FetchResult.ScrapeFailure("missing hash on drum track")
             val partId = drumTrack["partId"]?.jsonPrimitive?.intOrNull ?: drumIndex
 
-            // Step 2: track-data on the CDN
-            val trackBody = try {
-                getOrNull("$cdnBaseUrl/$songId/$revisionId/$image/$partId.json")
-            } catch (e: IOException) {
-                Log.w(TAG, "track-data IOException", e)
-                return@withContext FetchResult.NetworkError
-            } ?: return@withContext FetchResult.ScrapeFailure("track-data HTTP error")
+            // Step 2: track-data on the CDN. Try each host until one returns 2xx —
+            // see DEFAULT_CDN_BASE_URLS comment for why.
+            val path = "$songId/$revisionId/$image/$partId.json"
+            var trackBody: String? = null
+            for (host in cdnBaseUrls) {
+                val body = try {
+                    getOrNull("$host/$path")
+                } catch (e: IOException) {
+                    Log.w(TAG, "track-data IOException on $host", e)
+                    return@withContext FetchResult.NetworkError
+                }
+                if (body != null) {
+                    trackBody = body
+                    break
+                }
+            }
+            if (trackBody == null) {
+                return@withContext FetchResult.ScrapeFailure("track-data HTTP error on all CDN hosts")
+            }
 
             val root = try {
                 json.parseToJsonElement(trackBody).jsonObject

@@ -23,7 +23,7 @@ class OkHttpSongsterrTabFetcherTest {
         fetcher = OkHttpSongsterrTabFetcher(
             client = OkHttpClient(),
             metaBaseUrl = base,
-            cdnBaseUrl = base,  // same MockWebServer for tests
+            cdnBaseUrls = listOf(base),  // same MockWebServer for tests
         )
     }
 
@@ -106,6 +106,49 @@ class OkHttpSongsterrTabFetcherTest {
         server.shutdown()
         val result = fetcher.fetchDrumTrack(1L)
         assertEquals(FetchResult.NetworkError, result)
+    }
+
+    @Test fun `falls back to next CDN host when first returns non-2xx`() = runTest {
+        val base = server.url("/").toString().trimEnd('/')
+        fetcher = OkHttpSongsterrTabFetcher(
+            client = OkHttpClient(),
+            metaBaseUrl = base,
+            cdnBaseUrls = listOf(base, base),  // two "hosts" via one server
+        )
+        server.enqueue(
+            MockResponse().setBody(
+                """{"songId":269,"revisionId":6953431,"image":"v0-3-2-stage","tracks":[
+                    {"instrumentId":1024,"instrument":"Drums","name":"D","hash":"drums_TS","partId":0}
+                ],"popularTrackDrum":0}""",
+            ),
+        )
+        server.enqueue(MockResponse().setResponseCode(403))  // legacy host doesn't have it
+        server.enqueue(MockResponse().setBody(fixture("revision-sample.json")))  // new host does
+
+        val result = fetcher.fetchDrumTrack(269L)
+        assertTrue("expected Success after fallback, got $result", result is FetchResult.Success)
+        assertEquals("drums_TS", (result as FetchResult.Success).data.drumTrackHash)
+    }
+
+    @Test fun `returns ScrapeFailure when all CDN hosts return non-2xx`() = runTest {
+        val base = server.url("/").toString().trimEnd('/')
+        fetcher = OkHttpSongsterrTabFetcher(
+            client = OkHttpClient(),
+            metaBaseUrl = base,
+            cdnBaseUrls = listOf(base, base),
+        )
+        server.enqueue(
+            MockResponse().setBody(
+                """{"songId":1,"revisionId":2,"image":"v0-x","tracks":[
+                    {"instrumentId":1024,"instrument":"Drums","name":"D","hash":"drums_X","partId":0}
+                ],"popularTrackDrum":0}""",
+            ),
+        )
+        server.enqueue(MockResponse().setResponseCode(403))
+        server.enqueue(MockResponse().setResponseCode(404))
+
+        val result = fetcher.fetchDrumTrack(1L)
+        assertTrue("expected ScrapeFailure, got $result", result is FetchResult.ScrapeFailure)
     }
 
     @Test fun `meta endpoint URL is constructed correctly`() = runTest {

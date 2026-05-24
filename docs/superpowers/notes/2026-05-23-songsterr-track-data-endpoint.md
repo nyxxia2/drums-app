@@ -15,9 +15,12 @@ for the captured response.
    → from `tracks[]` and `popularTrackDrum` (index), get the drum track's
      `partId` (which equals its index in the array)
 
-3. GET https://dqsljvtekg760.cloudfront.net/{songId}/{revisionId}/{image}/{partId}.json
+3. GET https://{cdnHost}/{songId}/{revisionId}/{image}/{partId}.json
    → gzipped JSON track data (must request with Accept-Encoding: gzip OR
      use OkHttp's transparent gzip — OkHttp does it by default)
+
+   `{cdnHost}` is one of TWO known CloudFront distributions (see "CDN
+   hosts" below). The fetcher tries each in order until one returns 2xx.
 ```
 
 The `/api/meta/{songId}/revisions` endpoint exists too but it only returns
@@ -25,9 +28,26 @@ revision history metadata; it does NOT include the `image` slug.
 `/api/meta/{songId}` is the single endpoint that gives revisionId + image
 together.
 
+## CDN hosts
+
+Songsterr serves track-data from at least two CloudFront distributions.
+The web player has the host list baked into its bundled JS; the meta
+API does not expose which host any given song lives on.
+
+| Host                              | Carries (observed)                                    |
+|-----------------------------------|-------------------------------------------------------|
+| `d3d3l6a6rcgkaf.cloudfront.net`   | Modern tabs (image slug starts with `v0-…-stage`) — the majority of popular songs (Nirvana, Led Zeppelin, AC/DC, Radiohead, …) |
+| `dqsljvtekg760.cloudfront.net`    | Legacy tabs (image slug starts with `v5-`) — older / less-trafficked songs (e.g. Phil Collins "In The Air Tonight" songId 50420) |
+
+The slug-prefix correlation looks deterministic but isn't documented,
+so we don't depend on it — `OkHttpSongsterrTabFetcher` tries each host
+in `DEFAULT_CDN_BASE_URLS` order until one returns 2xx. If Songsterr
+adds a third distribution, capture it via Playwright (same method as
+Task 8 in the Phase 3 plan) and prepend it to the constant.
+
 ## URL pattern
 
-`https://dqsljvtekg760.cloudfront.net/{songId}/{revisionId}/{image}/{partId}.json`
+`https://{cdnHost}/{songId}/{revisionId}/{image}/{partId}.json`
 
 Where:
 - `songId`: Long (e.g. `50420`)
@@ -129,11 +149,10 @@ Position of a beat within its bar:
 
 ## Stability notes
 
-- `version: 8` at the file level + `v5-` prefix in the slug are
-  versioned. If Songsterr bumps either, the fixture-based regression
-  tests catch it.
-- The cloudfront host `dqsljvtekg760.cloudfront.net` is an opaque
-  CDN distribution. If they change it, we re-derive from a fresh
-  network capture and update the constant in `OkHttpSongsterrTabFetcher`.
+- `version: 8` at the file level is versioned. If Songsterr bumps it,
+  the fixture-based regression tests catch it.
+- The image-slug prefix (`v5-` legacy, `v0-…-stage` modern) appears to
+  correlate with CDN host but isn't load-bearing — we try each host
+  rather than parse the slug. See "CDN hosts" above.
 - No rate-limit observed at typical browsing speed (~10s between songs).
   Aggressive scripted fetches may hit one.
