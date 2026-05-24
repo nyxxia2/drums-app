@@ -39,6 +39,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import ph.nextbank.drums.audio.songsterr.SongsterrResult
+import ph.nextbank.drums.ui.player.YouTubeConfirmDialog
 import ph.nextbank.drums.ui.theme.DrumsColors
 import ph.nextbank.drums.ui.theme.DrumsType
 
@@ -135,7 +136,15 @@ fun AddSongScreen(
                 }
             }
         }
-        if (state.isAdding) {
+        val pending = state.pendingConfirm
+        if (pending != null) {
+            YouTubeConfirmDialog(
+                candidate = pending.candidate,
+                onUseThis = vm::confirmPendingAdd,
+                onTryAnother = vm::dismissPendingAdd,  // no cycling at add time — same as dismiss
+                onDismiss = vm::dismissPendingAdd,
+            )
+        } else if (state.isAdding) {
             Box(
                 Modifier
                     .fillMaxSize()
