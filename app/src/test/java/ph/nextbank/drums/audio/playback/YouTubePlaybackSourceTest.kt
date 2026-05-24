@@ -5,6 +5,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import ph.nextbank.drums.audio.ConstantBpmTimeMap
+import ph.nextbank.drums.audio.PointsBasedTimeMap
 
 class YouTubePlaybackSourceTest {
 
@@ -106,6 +107,28 @@ class YouTubePlaybackSourceTest {
         source.nudgeOffset(125)
         fake.simulateSecond(1.0f)
         assertEquals(9f, source.currentSlot.first(), 0.01f)
+    }
+
+    @Test
+    fun `youtubeOffsetMs applies uniformly before PointsBasedTimeMap`() = runTest {
+        // points=[0.0,2.0,4.0,6.0], slotsPerBar=16, totalSlots=64, offsetMs=500
+        // At video-time 0.5s with offset 500ms: effectiveSec = 0.5 + 0.5 = 1.0
+        // bar 0 spans [0.0, 2.0], fraction = 1.0/2.0 = 0.5 → slot = 0.5 * 16 = 8
+        // Equivalently: at video-time 1.0s with no offset, slot is also 8.
+        val fake = FakeYouTubeAdapter()
+        val source = YouTubePlaybackSource(
+            timeMap = PointsBasedTimeMap(
+                points = listOf(0.0, 2.0, 4.0, 6.0),
+                slotsPerBar = 16,
+                totalSlots = 64,
+            ),
+            adapter = fake,
+            initialOffsetMs = 500,
+        )
+        fake.simulateReady()
+        fake.simulatePlay()
+        fake.simulateSecond(0.5f)
+        assertEquals(8f, source.currentSlot.first(), 0.01f)
     }
 
     @Test

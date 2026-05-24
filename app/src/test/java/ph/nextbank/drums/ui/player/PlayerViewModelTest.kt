@@ -310,6 +310,35 @@ class PlayerViewModelTest {
         assertEquals("legacyXYZ12", (vm.state.value.phase as PlayerPhase.Confirming).candidate.videoId)
     }
 
+    @Test fun `stream extraction failure on synced video advances to next synced entry`() = runTest {
+        val entries = listOf(
+            VideoPointEntry("badVideo123", listOf(0.0, 2.0), null),
+            VideoPointEntry("goodVideo12", listOf(0.0, 2.0), null),
+        )
+        val song = songWithoutVideo(id = "songX", videoPoints = entries)
+        val repo = FakeSongRepository().apply { seed(song) }
+        val search = FakeYouTubeSearchService().apply {
+            metaResults = mapOf(
+                "badVideo123" to SearchResult("badVideo123", "Bad", "Ch", 200, ""),
+                "goodVideo12" to SearchResult("goodVideo12", "Good", "Ch", 200, ""),
+            )
+            // First videoId's stream extraction returns null; second succeeds.
+            streamUrlForVideoId["badVideo123"] = null
+            streamUrlForVideoId["goodVideo12"] = "fake-stream-url"
+        }
+        val factory = FakeYouTubeAdapterFactory()
+        val vm = mkVm(repo, search, adapterFactory = factory, songId = "songX")
+        advanceUntilIdle()
+        vm.acceptCandidate()  // accepts badVideo123, extraction fails → should auto-advance to goodVideo12
+        advanceUntilIdle()
+
+        // Confirmation dialog should now show the second synced entry, not a legacy YouTube search result.
+        val phase = vm.state.value.phase
+        assertTrue("expected Confirming for second entry, got $phase", phase is PlayerPhase.Confirming)
+        assertEquals("goodVideo12", (phase as PlayerPhase.Confirming).candidate.videoId)
+        assertEquals(0, search.findForCalls)  // legacy search NOT taken
+    }
+
     @Test fun `accepting a synced candidate uses PointsBasedTimeMap`() = runTest {
         val entries = listOf(
             VideoPointEntry(

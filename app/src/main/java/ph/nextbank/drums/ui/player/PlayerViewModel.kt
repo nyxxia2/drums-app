@@ -93,6 +93,9 @@ class PlayerViewModel @Inject constructor(
         val entries = song.videoPoints ?: return
         if (idx !in entries.indices) {
             // Exhausted — fall through to legacy YouTube search.
+            // Bump the index past the end so tryAnotherVideo takes the legacy retry() path
+            // on subsequent taps instead of re-entering this exhaustion branch.
+            syncedCandidateIdx = entries.size
             _events.tryEmit(PlayerEvent.Toast("No more synced videos — searching YouTube."))
             runSearch(song, song.youtubeBlocklist.toSet())
             return
@@ -162,8 +165,23 @@ class PlayerViewModel @Inject constructor(
                 switchToSynth()
                 return
             }
+            // Blocklist the failed videoId so re-opening the song skips it.
+            val failedBlocklist = (_state.value.song?.youtubeBlocklist.orEmpty() + videoId).distinct()
+            repo.updateYoutubeBlocklist(songId, failedBlocklist)
+            _state.value = _state.value.copy(
+                song = _state.value.song?.copy(youtubeBlocklist = failedBlocklist),
+            )
             _events.tryEmit(PlayerEvent.Toast("Audio unavailable for this video — trying another"))
-            retry(autoAccept = true)
+            val currentSong = _state.value.song
+            val videoPoints = currentSong?.videoPoints
+            if (videoPoints != null && syncedCandidateIdx < videoPoints.size) {
+                // Synced path: advance to the next entry in the points list (per spec).
+                syncedCandidateIdx++
+                showSyncedCandidate(currentSong, syncedCandidateIdx)
+            } else {
+                // Unsynced or synced list exhausted: fall back to legacy YouTube search.
+                retry(autoAccept = true)
+            }
             return
         }
         val s = _state.value.song ?: return
