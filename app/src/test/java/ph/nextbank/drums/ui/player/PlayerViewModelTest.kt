@@ -354,4 +354,33 @@ class PlayerViewModelTest {
         advanceUntilIdle()
         assertEquals(8, vm.state.value.activeSlotIndex)
     }
+
+    @Test
+    fun `extraction failure preserves cached videoId`() = runTest {
+        val seed = songWithoutVideo().copy(youtubeVideoId = "ccc33333333")
+        val repo = FakeSongRepository().apply { seed(seed) }
+        // No audioUrls + no search queue → extraction fails for "ccc33333333",
+        // resolver returns empty, falls back to synth.
+        val search = FakeYouTubeSearchService()
+        val vm = mkVm(repo, search)
+        advanceUntilIdle()
+        assertEquals(PlayerPhase.SynthFallback, vm.state.first().phase)
+        assertEquals("ccc33333333", repo.snapshot("test1")!!.youtubeVideoId)
+        assertEquals(listOf("ccc33333333"), repo.snapshot("test1")!!.youtubeBlocklist)
+    }
+
+    @Test
+    fun `acceptCandidate defers persistence until extraction succeeds`() = runTest {
+        val repo = FakeSongRepository().apply { seed(songWithoutVideo()) }
+        val pick = SearchResult("abc12345678", "T", "U", 100, "")
+        val search = FakeYouTubeSearchService().apply {
+            queue = listOf(pick)
+            streamUrlForVideoId["abc12345678"] = null
+        }
+        val vm = mkVm(repo, search)
+        advanceUntilIdle()
+        vm.acceptCandidate(pick)
+        advanceUntilIdle()
+        assertEquals(null, repo.snapshot("test1")!!.youtubeVideoId)
+    }
 }

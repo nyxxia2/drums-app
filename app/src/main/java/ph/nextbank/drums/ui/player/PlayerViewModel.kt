@@ -107,10 +107,6 @@ class PlayerViewModel @Inject constructor(
 
     fun acceptCandidate(candidate: SearchResult) {
         viewModelScope.launch {
-            repo.updateYoutubeVideoId(songId, candidate.videoId)
-            _state.value = _state.value.copy(
-                song = _state.value.song?.copy(youtubeVideoId = candidate.videoId),
-            )
             startYouTubePlayback(candidate.videoId)
         }
     }
@@ -138,19 +134,25 @@ class PlayerViewModel @Inject constructor(
                 return
             }
             // Blocklist the failed videoId so re-opening the song skips it.
+            // Do NOT clear youtubeVideoId — the user's prior choice should survive a transient
+            // NewPipe extraction failure. If this song had no prior cache, there's nothing to keep.
             val failedBlocklist = (_state.value.song?.youtubeBlocklist.orEmpty() + videoId).distinct()
             repo.updateYoutubeBlocklist(songId, failedBlocklist)
-            repo.updateYoutubeVideoId(songId, null)
             _state.value = _state.value.copy(
-                song = _state.value.song?.copy(
-                    youtubeBlocklist = failedBlocklist,
-                    youtubeVideoId = null,
-                ),
+                song = _state.value.song?.copy(youtubeBlocklist = failedBlocklist),
             )
             _events.tryEmit(PlayerEvent.Toast("Audio unavailable for this video — trying another"))
             val currentSong = _state.value.song ?: return
             showCandidates(currentSong, failedBlocklist.toSet())
             return
+        }
+        // Stream URL resolved → this videoId is proven playable. Persist it so future opens
+        // skip the picker. Idempotent for the cold-open-from-cache case.
+        if (_state.value.song?.youtubeVideoId != videoId) {
+            repo.updateYoutubeVideoId(songId, videoId)
+            _state.value = _state.value.copy(
+                song = _state.value.song?.copy(youtubeVideoId = videoId),
+            )
         }
         val s = _state.value.song ?: return
         val adapter = adapterFactory.create(streamUrl)
