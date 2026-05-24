@@ -99,8 +99,8 @@ class AddSongViewModelTest {
         assertTrue(repo.allSnapshot().isEmpty())
         val pending = vm.state.first().pendingConfirm
         assertNotNull(pending)
-        assertEquals("yt00aaaaaaa", pending!!.candidate.videoId)
-        vm.confirmPendingAdd()
+        assertEquals(listOf("yt00aaaaaaa"), pending!!.candidates.map { it.videoId })
+        vm.confirmPendingAdd(pending.candidates.first())
         advanceUntilIdle()
         assertEquals(50420L, fetcher.lastSongId)
         val snap = repo.allSnapshot()
@@ -158,7 +158,8 @@ class AddSongViewModelTest {
 
         vm.onResultClicked(sampleResult)
         advanceUntilIdle()
-        vm.confirmPendingAdd()
+        val pending = vm.state.first().pendingConfirm!!
+        vm.confirmPendingAdd(pending.candidates.first())
         advanceUntilIdle()
 
         val saved = repo.allSnapshot().first()
@@ -174,7 +175,8 @@ class AddSongViewModelTest {
 
         vm.onResultClicked(sampleResult)
         advanceUntilIdle()
-        vm.confirmPendingAdd()
+        val pending = vm.state.first().pendingConfirm!!
+        vm.confirmPendingAdd(pending.candidates.first())
         advanceUntilIdle()
 
         val saved = repo.allSnapshot().first()
@@ -189,7 +191,7 @@ class AddSongViewModelTest {
         val s = vm.state.first()
         assertTrue(s.isAdding)
         assertNotNull(s.pendingConfirm)
-        assertEquals("yt00aaaaaaa", s.pendingConfirm!!.candidate.videoId)
+        assertEquals(listOf("yt00aaaaaaa"), s.pendingConfirm!!.candidates.map { it.videoId })
         assertTrue(repo.allSnapshot().isEmpty())
     }
 
@@ -230,7 +232,8 @@ class AddSongViewModelTest {
         val (vm, repo, _, _) = mkVm()
         vm.onResultClicked(sampleResult)
         advanceUntilIdle()
-        vm.confirmPendingAdd()
+        val pending = vm.state.first().pendingConfirm!!
+        vm.confirmPendingAdd(pending.candidates.first())
         advanceUntilIdle()
 
         val savedId = repo.allSnapshot().first().id
@@ -263,10 +266,11 @@ class AddSongViewModelTest {
         val (vm, repo, _, _) = mkVm()
         vm.onResultClicked(sampleResult)
         advanceUntilIdle()
-        assertNotNull(vm.state.first().pendingConfirm)
+        val pending = vm.state.first().pendingConfirm
+        assertNotNull(pending)
 
         // User taps Confirm — pendingConfirm should clear synchronously.
-        vm.confirmPendingAdd()
+        vm.confirmPendingAdd(pending!!.candidates.first())
         assertNull(vm.state.first().pendingConfirm)
 
         // User taps Dismiss before the upsert coroutine finishes — must be a no-op.

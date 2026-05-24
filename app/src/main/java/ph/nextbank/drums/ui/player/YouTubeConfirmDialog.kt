@@ -9,8 +9,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,9 +29,9 @@ import ph.nextbank.drums.ui.theme.DrumsType
 
 @Composable
 fun YouTubeConfirmDialog(
-    candidate: SearchResult,
-    onUseThis: () -> Unit,
-    onTryAnother: () -> Unit,
+    candidates: List<SearchResult>,
+    onPick: (SearchResult) -> Unit,
+    onNoneOfThese: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -37,46 +40,61 @@ fun YouTubeConfirmDialog(
                 .clip(RoundedCornerShape(16.dp))
                 .background(DrumsColors.Surface)
                 .border(1.dp, DrumsColors.Line, RoundedCornerShape(16.dp))
-                .padding(20.dp)
+                .padding(16.dp)
                 .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                "Found a video",
+                "Pick the right video",
                 color = DrumsColors.Dim,
                 style = DrumsType.allCapsLabel,
             )
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                AsyncImage(
-                    model = candidate.thumbnailUrl,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .width(120.dp)
-                        .aspectRatio(16f / 9f)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(DrumsColors.Surface2),
-                )
-                Column(Modifier.weight(1f)) {
-                    Text(candidate.title, color = DrumsColors.Text, style = DrumsType.cardTitle, maxLines = 2)
-                    Text(
-                        "${candidate.channelTitle} · ${formatDuration(candidate.durationSec)}",
-                        color = DrumsColors.Dim,
-                        style = DrumsType.caption,
-                    )
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 360.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(candidates, key = { it.videoId }) { candidate ->
+                    CandidateRow(candidate = candidate, onClick = { onPick(candidate) })
                 }
             }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                DialogButton("Try another", DrumsColors.Surface2, DrumsColors.Text, onTryAnother)
-                DialogButton(
-                    "Use this video",
-                    DrumsColors.Accent,
-                    androidx.compose.ui.graphics.Color.White,
-                    onUseThis,
-                )
+                DialogButton("None of these", DrumsColors.Surface2, DrumsColors.Text, onNoneOfThese)
             }
+        }
+    }
+}
+
+@Composable
+private fun CandidateRow(candidate: SearchResult, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(DrumsColors.Surface2)
+            .clickable(onClick = onClick)
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        AsyncImage(
+            model = candidate.thumbnailUrl,
+            contentDescription = null,
+            modifier = Modifier
+                .width(96.dp)
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(6.dp))
+                .background(DrumsColors.Surface),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(candidate.title, color = DrumsColors.Text, style = DrumsType.cardTitle, maxLines = 2)
+            Text(
+                "${candidate.channelTitle} · ${formatDuration(candidate.durationSec)}",
+                color = DrumsColors.Dim,
+                style = DrumsType.caption,
+            )
         }
     }
 }

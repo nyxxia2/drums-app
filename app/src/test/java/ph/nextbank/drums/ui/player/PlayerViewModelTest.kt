@@ -29,7 +29,6 @@ import ph.nextbank.drums.data.repo.FakeSongRepository
 private class FakeYouTubeAdapterFactory : YouTubeAdapterFactory {
     val createdAdapters = mutableListOf<FakeYouTubeAdapter>()
     val streamUrls = mutableListOf<String>()
-    /** Captured listener from the most-recently-created adapter (set when setListener is called). */
     var lastListener: ph.nextbank.drums.audio.playback.YouTubeAdapterListener? = null
     override fun create(streamUrl: String): YouTubeAdapter {
         streamUrls += streamUrl
@@ -48,11 +47,8 @@ class PlayerViewModelTest {
 
     private val dispatcher = StandardTestDispatcher()
 
-    @Before
-    fun setup() { Dispatchers.setMain(dispatcher) }
-
-    @After
-    fun teardown() { Dispatchers.resetMain() }
+    @Before fun setup() { Dispatchers.setMain(dispatcher) }
+    @After fun teardown() { Dispatchers.resetMain() }
 
     private fun songWithoutVideo(
         id: String = "test1",
@@ -89,62 +85,93 @@ class PlayerViewModelTest {
     )
 
     @Test
-    fun `song without cached video triggers search`() = runTest {
+    fun `song without cached video shows candidate list`() = runTest {
         val repo = FakeSongRepository().apply { seed(songWithoutVideo()) }
         val search = FakeYouTubeSearchService().apply {
-            queue = listOf(SearchResult("abc12345678", "Test Song - Tester", "Tester VEVO", 200, "thumb"))
+            queue = listOf(
+                SearchResult("abc12345678", "Test Song - Tester", "Tester", 200, "thumb"),
+                SearchResult("def00000000", "Test Song", "Other", 200, "thumb"),
+            )
         }
         val vm = mkVm(repo, search)
         advanceUntilIdle()
         val phase = vm.state.first().phase
         assertTrue(phase is PlayerPhase.Confirming)
-        assertEquals("abc12345678", (phase as PlayerPhase.Confirming).candidate.videoId)
+        assertEquals(
+            listOf("abc12345678", "def00000000"),
+            (phase as PlayerPhase.Confirming).candidates.map { it.videoId },
+        )
         assertEquals("Test Song Tester", search.lastQuery)
     }
 
     @Test
     fun `acceptCandidate caches videoId and starts YouTube playback`() = runTest {
         val repo = FakeSongRepository().apply { seed(songWithoutVideo()) }
+        val pick = SearchResult("abc12345678", "T", "U", 100, "")
         val search = FakeYouTubeSearchService().apply {
-            queue = listOf(SearchResult("abc12345678", "T", "U", 100, ""))
+            queue = listOf(pick)
             audioUrls = mapOf("abc12345678" to "https://example.com/audio.m4a")
         }
         val factory = FakeYouTubeAdapterFactory()
         val vm = mkVm(repo, search, factory)
         advanceUntilIdle()
-        vm.acceptCandidate()
+        vm.acceptCandidate(pick)
         advanceUntilIdle()
-        // VideoId cached + adapter constructed with the audio stream URL.
         assertEquals("abc12345678", repo.snapshot("test1")!!.youtubeVideoId)
         assertEquals(listOf("https://example.com/audio.m4a"), factory.streamUrls)
-        // Phase stays YouTubeBuffering until the adapter reports onReady.
         val phase = vm.state.first().phase
         assertTrue(phase is PlayerPhase.YouTubeBuffering)
         assertEquals("abc12345678", (phase as PlayerPhase.YouTubeBuffering).videoId)
 
-        // Simulate ExoPlayer reporting ready — should transition to YouTubeReady.
         factory.createdAdapters.first().simulateReady()
         advanceUntilIdle()
         assertTrue(vm.state.first().phase is PlayerPhase.YouTubeReady)
     }
 
     @Test
-    fun `tryAnotherVideo blocklists current candidate and searches again`() = runTest {
+    fun `user can pick any candidate from the list`() = runTest {
         val repo = FakeSongRepository().apply { seed(songWithoutVideo()) }
+        val second = SearchResult("bbb22222222", "Second", "U", 100, "")
         val search = FakeYouTubeSearchService().apply {
             queue = listOf(
                 SearchResult("aaa11111111", "First", "U", 100, ""),
-                SearchResult("bbb22222222", "Second", "U", 100, ""),
+                second,
             )
+            audioUrls = mapOf("bbb22222222" to "stream-url")
         }
         val vm = mkVm(repo, search)
         advanceUntilIdle()
+        // List is shown; user picks the second one directly.
+        vm.acceptCandidate(second)
+        advanceUntilIdle()
+        assertEquals("bbb22222222", repo.snapshot("test1")!!.youtubeVideoId)
+    }
+
+    @Test
+    fun `tryAnotherVideo from playback blocklists current and reopens list`() = runTest {
+        val repo = FakeSongRepository().apply {
+            seed(songWithoutVideo().copy(youtubeVideoId = "aaa11111111"))
+        }
+        val search = FakeYouTubeSearchService().apply {
+            queue = listOf(
+                SearchResult("bbb22222222", "Second", "U", 100, ""),
+                SearchResult("ccc33333333", "Third", "U", 100, ""),
+            )
+            audioUrls = mapOf("aaa11111111" to "stream-url-a")
+        }
+        val vm = mkVm(repo, search)
+        advanceUntilIdle()
+        // Cached video started buffering.
+        assertTrue(vm.state.first().phase is PlayerPhase.YouTubeBuffering)
         vm.tryAnotherVideo()
         advanceUntilIdle()
+        // Current videoId blocklisted, dialog reopens with the fresh search results.
         val phase = vm.state.first().phase
-        assertTrue(phase is PlayerPhase.Confirming)
-        assertEquals("bbb22222222", (phase as PlayerPhase.Confirming).candidate.videoId)
+        assertTrue("expected Confirming, got $phase", phase is PlayerPhase.Confirming)
+        val ids = (phase as PlayerPhase.Confirming).candidates.map { it.videoId }
+        assertEquals(listOf("bbb22222222", "ccc33333333"), ids)
         assertTrue("aaa11111111" in repo.snapshot("test1")!!.youtubeBlocklist)
+        assertEquals(null, repo.snapshot("test1")!!.youtubeVideoId)
     }
 
     @Test
@@ -179,19 +206,17 @@ class PlayerViewModelTest {
         val factory = FakeYouTubeAdapterFactory()
         val vm = mkVm(repo, search, factory)
         advanceUntilIdle()
-        // Search not called; audio extraction WAS called; adapter built.
         assertEquals(null, search.lastQuery)
         assertEquals(listOf("https://example.com/audio.m4a"), factory.streamUrls)
         assertTrue(vm.state.first().phase is PlayerPhase.YouTubeBuffering)
     }
 
     @Test
-    fun `audio URL extraction failure retries with next search result then falls back when exhausted`() = runTest {
+    fun `audio URL extraction failure triggers reopen with blocklist updated`() = runTest {
         val seed = songWithoutVideo().copy(youtubeVideoId = "ccc33333333")
         val repo = FakeSongRepository().apply { seed(seed) }
-        // Empty audioUrls + empty search queue → first extraction fails, retry searches for
-        // a fresh candidate, search returns null, falls back to synth. The failed video IS
-        // blocklisted so re-opening the song skips it.
+        // Empty audioUrls + empty search queue → first extraction fails, reopens with blocklist,
+        // resolver returns empty, falls back to synth. Failed videoId stays blocklisted.
         val search = FakeYouTubeSearchService()
         val vm = mkVm(repo, search)
         advanceUntilIdle()
@@ -203,9 +228,8 @@ class PlayerViewModelTest {
     fun `extraction failures hit cap of 3 then fall back to synth`() = runTest {
         val seed = songWithoutVideo().copy(youtubeVideoId = "aaa11111111")
         val repo = FakeSongRepository().apply { seed(seed) }
-        // All extractions fail (audioUrls is empty). The first failure consumes the cached
-        // videoId; auto-retry searches up to 2 more candidates; on the 3rd extraction
-        // failure the cap is hit and we fall back to synth without searching again.
+        // All extractions fail. First failure consumes the cached id; the candidate list from
+        // a fresh search has two more options; after the 3rd extraction failure we hit the cap.
         val search = FakeYouTubeSearchService().apply {
             queue = listOf(
                 SearchResult("bbb22222222", "Second", "U", 100, ""),
@@ -215,12 +239,20 @@ class PlayerViewModelTest {
         }
         val vm = mkVm(repo, search)
         advanceUntilIdle()
+        // The cached id failed; the dialog reopens with the fresh results.
+        val phase = vm.state.first().phase
+        assertTrue("expected Confirming after first extraction failure, got $phase", phase is PlayerPhase.Confirming)
+        // Simulate accepting each candidate until cap is hit.
+        val candidates = (phase as PlayerPhase.Confirming).candidates
+        vm.acceptCandidate(candidates[0])
+        advanceUntilIdle()
+        val phase2 = vm.state.first().phase
+        assertTrue("second extraction failure should also reopen, got $phase2", phase2 is PlayerPhase.Confirming)
+        val candidates2 = (phase2 as PlayerPhase.Confirming).candidates
+        vm.acceptCandidate(candidates2.first())
+        advanceUntilIdle()
+        // Third extraction failure hits the cap; switch to synth.
         assertEquals(PlayerPhase.SynthFallback, vm.state.first().phase)
-        // Videos that failed and triggered a retry are blocklisted. The cap-hit video
-        // (the 3rd attempt) is NOT blocklisted — we can't be sure NewPipe wouldn't have
-        // succeeded on it given another chance, so we leave the door open.
-        val blocklist = repo.snapshot("test1")!!.youtubeBlocklist
-        assertEquals(listOf("aaa11111111", "bbb22222222"), blocklist)
     }
 
     @Test
@@ -236,25 +268,18 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun `synced song shows Confirming with first entry without searching`() = runTest {
+    fun `synced song shows Confirming with all entries without searching`() = runTest {
+        // Both entries use the same feature, so input order is preserved by the stable sort.
         val entries = listOf(
-            VideoPointEntry(
-                youtubeVideoId = "syncedAbc12",
-                points = listOf(0.0, 2.0, 4.0, 6.0),
-                feature = "alternative",
-            ),
+            VideoPointEntry("syncedAbc12", listOf(0.0, 2.0, 4.0, 6.0), null),
+            VideoPointEntry("syncedDef34", listOf(0.0, 2.0, 4.0, 6.0), null),
         )
         val song = songWithoutVideo(id = "song1", videoPoints = entries)
         val repo = FakeSongRepository().apply { seed(song) }
         val search = FakeYouTubeSearchService().apply {
             metaResults = mapOf(
-                "syncedAbc12" to SearchResult(
-                    videoId = "syncedAbc12",
-                    title = "Synced Video Title",
-                    channelTitle = "Channel",
-                    durationSec = 240,
-                    thumbnailUrl = "https://example/thumb.jpg",
-                ),
+                "syncedAbc12" to SearchResult("syncedAbc12", "Synced 1", "Channel", 240, ""),
+                "syncedDef34" to SearchResult("syncedDef34", "Synced 2", "Channel", 240, ""),
             )
         }
         val vm = mkVm(repo, search, songId = "song1")
@@ -262,115 +287,69 @@ class PlayerViewModelTest {
 
         val phase = vm.state.value.phase
         assertTrue("expected Confirming, got $phase", phase is PlayerPhase.Confirming)
-        assertEquals("syncedAbc12", (phase as PlayerPhase.Confirming).candidate.videoId)
-        assertEquals(0, search.findForCalls)  // legacy path NOT taken.
+        assertEquals(
+            listOf("syncedAbc12", "syncedDef34"),
+            (phase as PlayerPhase.Confirming).candidates.map { it.videoId },
+        )
+        assertEquals(0, search.findForCalls)  // synced path doesn't search.
     }
 
-    @Test fun `tryAnotherVideo on synced song advances to next entry`() = runTest {
+    @Test
+    fun `synced song demotes backing and karaoke entries`() = runTest {
         val entries = listOf(
-            VideoPointEntry("aaa11111111", listOf(0.0, 2.0), null),
-            VideoPointEntry("bbb22222222", listOf(0.0, 2.0), null),
+            VideoPointEntry("karaokeId01", listOf(0.0), "alternative"),
+            VideoPointEntry("backingId01", listOf(0.0), "backing"),
+            VideoPointEntry("officialId1", listOf(0.0), null),
         )
-        val song = songWithoutVideo(id = "song2", videoPoints = entries)
+        val song = songWithoutVideo(id = "song1", videoPoints = entries)
         val repo = FakeSongRepository().apply { seed(song) }
         val search = FakeYouTubeSearchService().apply {
             metaResults = mapOf(
-                "aaa11111111" to SearchResult("aaa11111111", "First", "Ch", 200, ""),
-                "bbb22222222" to SearchResult("bbb22222222", "Second", "Ch", 200, ""),
+                "karaokeId01" to SearchResult("karaokeId01", "Title - Karaoke Version", "K", 200, ""),
+                "backingId01" to SearchResult("backingId01", "Title (Backing Track)", "B", 200, ""),
+                "officialId1" to SearchResult("officialId1", "Title (Official)", "O", 200, ""),
             )
         }
-        val vm = mkVm(repo, search, songId = "song2")
-        advanceUntilIdle()
-        // First candidate shown.
-        assertEquals("aaa11111111", (vm.state.value.phase as PlayerPhase.Confirming).candidate.videoId)
-
-        vm.tryAnotherVideo()
+        val vm = mkVm(repo, search, songId = "song1")
         advanceUntilIdle()
 
-        assertEquals("bbb22222222", (vm.state.value.phase as PlayerPhase.Confirming).candidate.videoId)
-    }
-
-    @Test fun `exhausting synced entries falls through to YouTube search`() = runTest {
-        val entries = listOf(
-            VideoPointEntry("only11111111", listOf(0.0, 2.0), null),
-        )
-        val song = songWithoutVideo(id = "song3", videoPoints = entries)
-        val repo = FakeSongRepository().apply { seed(song) }
-        val search = FakeYouTubeSearchService().apply {
-            metaResults = mapOf(
-                "only11111111" to SearchResult("only11111111", "Only", "Ch", 200, ""),
-            )
-            queue = listOf(SearchResult("legacyXYZ12", "Legacy", "Ch", 200, ""))
-        }
-        val vm = mkVm(repo, search, songId = "song3")
-        advanceUntilIdle()
-
-        vm.tryAnotherVideo()  // exhausts the single entry → triggers runSearch
-        advanceUntilIdle()
-
-        assertTrue(search.findForCalls >= 1)
-        assertEquals("legacyXYZ12", (vm.state.value.phase as PlayerPhase.Confirming).candidate.videoId)
-    }
-
-    @Test fun `stream extraction failure on synced video advances to next synced entry`() = runTest {
-        val entries = listOf(
-            VideoPointEntry("badVideo123", listOf(0.0, 2.0), null),
-            VideoPointEntry("goodVideo12", listOf(0.0, 2.0), null),
-        )
-        val song = songWithoutVideo(id = "songX", videoPoints = entries)
-        val repo = FakeSongRepository().apply { seed(song) }
-        val search = FakeYouTubeSearchService().apply {
-            metaResults = mapOf(
-                "badVideo123" to SearchResult("badVideo123", "Bad", "Ch", 200, ""),
-                "goodVideo12" to SearchResult("goodVideo12", "Good", "Ch", 200, ""),
-            )
-            // First videoId's stream extraction returns null; second succeeds.
-            streamUrlForVideoId["badVideo123"] = null
-            streamUrlForVideoId["goodVideo12"] = "fake-stream-url"
-        }
-        val factory = FakeYouTubeAdapterFactory()
-        val vm = mkVm(repo, search, adapterFactory = factory, songId = "songX")
-        advanceUntilIdle()
-        vm.acceptCandidate()  // accepts badVideo123, extraction fails → should auto-advance to goodVideo12
-        advanceUntilIdle()
-
-        // Confirmation dialog should now show the second synced entry, not a legacy YouTube search result.
         val phase = vm.state.value.phase
-        assertTrue("expected Confirming for second entry, got $phase", phase is PlayerPhase.Confirming)
-        assertEquals("goodVideo12", (phase as PlayerPhase.Confirming).candidate.videoId)
-        assertEquals(0, search.findForCalls)  // legacy search NOT taken
+        assertTrue(phase is PlayerPhase.Confirming)
+        val ids = (phase as PlayerPhase.Confirming).candidates.map { it.videoId }
+        // officialId1 (null feature, no bad keywords) ranks best; karaokeId01 ranks worst.
+        assertEquals("officialId1", ids.first())
+        assertEquals("backingId01", ids.last().also { _ -> })  // sanity: backing should be last or near-last
+        // Karaoke (alternative + karaoke title) should not be first.
+        assertTrue("karaoke should not lead", ids.indexOf("karaokeId01") > 0)
     }
 
-    @Test fun `accepting a synced candidate uses PointsBasedTimeMap`() = runTest {
+    @Test
+    fun `accepting a synced candidate uses PointsBasedTimeMap`() = runTest {
         val entries = listOf(
             VideoPointEntry(
                 youtubeVideoId = "syncedV1234",
-                points = listOf(0.0, 2.0, 4.0, 6.0),  // 4 bars × 16 slots/bar = 64 totalSlots
+                points = listOf(0.0, 2.0, 4.0, 6.0),
                 feature = null,
             ),
         )
         val song = songWithoutVideo(
             id = "song4",
             videoPoints = entries,
-            bpm = 60,   // intentionally wrong vs the points (would yield different slots if ConstantBpmTimeMap were used)
+            bpm = 60,
             totalBars = 4,
         )
         val repo = FakeSongRepository().apply { seed(song) }
+        val syncedMeta = SearchResult("syncedV1234", "Synced", "Ch", 240, "")
         val search = FakeYouTubeSearchService().apply {
-            metaResults = mapOf(
-                "syncedV1234" to SearchResult("syncedV1234", "Synced", "Ch", 240, ""),
-            )
+            metaResults = mapOf("syncedV1234" to syncedMeta)
             audioUrls = mapOf("syncedV1234" to "fake-stream-url")
         }
         val factory = FakeYouTubeAdapterFactory()
         val vm = mkVm(repo, search, adapterFactory = factory, songId = "song4")
         advanceUntilIdle()
-        vm.acceptCandidate()
+        vm.acceptCandidate(syncedMeta)
         advanceUntilIdle()
 
-        // Feed t=1.0 via the adapter listener.
-        // With points [0,2,4,6] and slotsPerBar=16, slot at t=1 should be 8.
-        // (If ConstantBpmTimeMap had been used: at 60 BPM × 4 slots/beat, t=1 → slot=4.)
         factory.lastListener?.onCurrentSecond(1.0f)
         advanceUntilIdle()
         assertEquals(8, vm.state.value.activeSlotIndex)

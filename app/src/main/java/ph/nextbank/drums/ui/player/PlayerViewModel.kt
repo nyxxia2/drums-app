@@ -29,7 +29,7 @@ import javax.inject.Inject
 sealed interface PlayerPhase {
     data object Loading : PlayerPhase
     data object Searching : PlayerPhase
-    data class Confirming(val candidate: SearchResult) : PlayerPhase
+    data class Confirming(val candidates: List<SearchResult>) : PlayerPhase
     data class YouTubeBuffering(val videoId: String) : PlayerPhase
     data class YouTubeReady(val videoId: String) : PlayerPhase
     data object SynthFallback : PlayerPhase
@@ -71,8 +71,6 @@ class PlayerViewModel @Inject constructor(
     private val sourceJobs = mutableListOf<Job>()
     /** Counts how many videos we've tried for this song since open. Bounded to avoid loops. */
     private var extractionAttempts = 0
-    /** Index into song.videoPoints!! of the currently-displayed candidate. */
-    private var syncedCandidateIdx: Int = 0
 
     init {
         viewModelScope.launch {
@@ -82,68 +80,36 @@ class PlayerViewModel @Inject constructor(
                 youtubeOffsetMs = s.youtubeOffsetMs,
             )
             val cachedId = s.youtubeVideoId
-            val syncedEntries = s.videoPoints
-            when {
-                cachedId != null -> startYouTubePlayback(cachedId)
-                !syncedEntries.isNullOrEmpty() -> showSyncedCandidate(s, idx = 0)
-                else -> runSearch(s, s.youtubeBlocklist.toSet())
+            if (cachedId != null) {
+                startYouTubePlayback(cachedId)
+            } else {
+                showCandidates(s, s.youtubeBlocklist.toSet())
             }
         }
     }
 
-    private suspend fun showSyncedCandidate(song: Song, idx: Int) {
-        val entries = song.videoPoints ?: return
-        if (idx !in entries.indices) {
-            // Exhausted — fall through to legacy YouTube search.
-            // Bump the index past the end so tryAnotherVideo takes the legacy retry() path
-            // on subsequent taps instead of re-entering this exhaustion branch.
-            syncedCandidateIdx = entries.size
-            _events.tryEmit(PlayerEvent.Toast("No more synced videos — searching YouTube."))
-            runSearch(song, song.youtubeBlocklist.toSet())
-            return
-        }
-        syncedCandidateIdx = idx
+    /** Resolve candidates and either show them in the confirm dialog or fall back to synth. */
+    private suspend fun showCandidates(song: Song, blocklist: Set<String>) {
         _state.value = _state.value.copy(phase = PlayerPhase.Searching)
-        val meta = searchService.fetchMeta(entries[idx].youtubeVideoId)
-        if (meta == null) {
-            // Skip and try the next one.
-            showSyncedCandidate(song, idx + 1)
-            return
-        }
-        _state.value = _state.value.copy(phase = PlayerPhase.Confirming(meta))
-    }
-
-    private suspend fun runSearch(song: Song, blocklist: Set<String>, autoAccept: Boolean = false) {
-        _state.value = _state.value.copy(phase = PlayerPhase.Searching)
-        val result = resolver.resolveInitial(
+        val candidates = resolver.resolveInitial(
             title = song.title,
             artist = song.artist,
-            videoPoints = null,
+            videoPoints = song.videoPoints,
             blocklist = blocklist,
         )
-        if (result == null) {
+        if (candidates.isEmpty()) {
             _events.tryEmit(PlayerEvent.Toast("No playable YouTube result — playing synth drums"))
             switchToSynth()
-        } else if (autoAccept) {
-            // Skip the confirmation dialog — used when retrying after the previously accepted
-            // video errored out (e.g. embedding restriction). User already opted in.
-            repo.updateYoutubeVideoId(songId, result.videoId)
-            _state.value = _state.value.copy(
-                song = _state.value.song?.copy(youtubeVideoId = result.videoId),
-            )
-            startYouTubePlayback(result.videoId)
         } else {
-            _state.value = _state.value.copy(phase = PlayerPhase.Confirming(result))
+            _state.value = _state.value.copy(phase = PlayerPhase.Confirming(candidates))
         }
     }
 
-    fun acceptCandidate() {
-        val cur = _state.value
-        val candidate = (cur.phase as? PlayerPhase.Confirming)?.candidate ?: return
+    fun acceptCandidate(candidate: SearchResult) {
         viewModelScope.launch {
             repo.updateYoutubeVideoId(songId, candidate.videoId)
-            _state.value = cur.copy(
-                song = cur.song?.copy(youtubeVideoId = candidate.videoId),
+            _state.value = _state.value.copy(
+                song = _state.value.song?.copy(youtubeVideoId = candidate.videoId),
             )
             startYouTubePlayback(candidate.videoId)
         }
@@ -174,20 +140,16 @@ class PlayerViewModel @Inject constructor(
             // Blocklist the failed videoId so re-opening the song skips it.
             val failedBlocklist = (_state.value.song?.youtubeBlocklist.orEmpty() + videoId).distinct()
             repo.updateYoutubeBlocklist(songId, failedBlocklist)
+            repo.updateYoutubeVideoId(songId, null)
             _state.value = _state.value.copy(
-                song = _state.value.song?.copy(youtubeBlocklist = failedBlocklist),
+                song = _state.value.song?.copy(
+                    youtubeBlocklist = failedBlocklist,
+                    youtubeVideoId = null,
+                ),
             )
             _events.tryEmit(PlayerEvent.Toast("Audio unavailable for this video — trying another"))
-            val currentSong = _state.value.song
-            val videoPoints = currentSong?.videoPoints
-            if (videoPoints != null && syncedCandidateIdx < videoPoints.size) {
-                // Synced path: advance to the next entry in the points list (per spec).
-                syncedCandidateIdx++
-                showSyncedCandidate(currentSong, syncedCandidateIdx)
-            } else {
-                // Unsynced or synced list exhausted: fall back to legacy YouTube search.
-                retry(autoAccept = true)
-            }
+            val currentSong = _state.value.song ?: return
+            showCandidates(currentSong, failedBlocklist.toSet())
             return
         }
         val s = _state.value.song ?: return
@@ -231,31 +193,20 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /** Reopen the confirm dialog with the original candidate list minus the current selection. */
     fun tryAnotherVideo() {
-        val song = _state.value.song
-        val syncedEntries = song?.videoPoints
-        if (song != null && !syncedEntries.isNullOrEmpty() && syncedCandidateIdx < syncedEntries.size) {
-            // Synced path: cycle to the next entry (or fall through if exhausted).
-            viewModelScope.launch { showSyncedCandidate(song, syncedCandidateIdx + 1) }
-        } else {
-            retry(autoAccept = false)
-        }
-    }
-
-    /** Internal retry that can skip the confirmation dialog — used for auto-retry after a YouTube error. */
-    private fun retry(autoAccept: Boolean) {
         val cur = _state.value
         val song = cur.song ?: return
-        val rejectedId: String? = when (val p = cur.phase) {
-            is PlayerPhase.Confirming -> p.candidate.videoId
+        val currentVideoId: String? = when (val p = cur.phase) {
+            is PlayerPhase.Confirming -> null  // already in confirm; no current to blocklist
             is PlayerPhase.YouTubeReady -> p.videoId
             is PlayerPhase.YouTubeBuffering -> p.videoId
             else -> null
         }
         viewModelScope.launch {
-            val newBlocklist = (song.youtubeBlocklist + listOfNotNull(rejectedId)).distinct()
-            repo.updateYoutubeBlocklist(songId, newBlocklist)
-            if (rejectedId != null) {
+            val newBlocklist = (song.youtubeBlocklist + listOfNotNull(currentVideoId)).distinct()
+            if (currentVideoId != null) {
+                repo.updateYoutubeBlocklist(songId, newBlocklist)
                 repo.updateYoutubeVideoId(songId, null)
             }
             source?.release(); source = null
@@ -264,16 +215,13 @@ class PlayerViewModel @Inject constructor(
                 youtubeVideoId = null,
             )
             _state.value = cur.copy(song = updatedSong)
-            runSearch(updatedSong, newBlocklist.toSet(), autoAccept = autoAccept)
+            showCandidates(updatedSong, newBlocklist.toSet())
         }
     }
 
     fun dismissConfirmation() {
         if (_state.value.phase is PlayerPhase.Confirming) switchToSynth()
     }
-
-    // bindYouTubeAdapter removed — startYouTubePlayback now constructs the ExoPlayer
-    // adapter directly inside the ViewModel. The Composable no longer hands one in.
 
     private fun switchToSynth() {
         source?.release()

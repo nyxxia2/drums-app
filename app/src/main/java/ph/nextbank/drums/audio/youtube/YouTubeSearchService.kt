@@ -2,11 +2,15 @@ package ph.nextbank.drums.audio.youtube
 
 interface YouTubeSearchService {
     /**
-     * Search YouTube for [query] and return the first video result whose ID
-     * isn't in [blocklist]. Returns null if no results or if the network/search
-     * fails.
+     * Search YouTube for [query] and return the top [maxResults] video candidates whose IDs
+     * aren't in [blocklist], best (lowest rank score) first. Returns an empty list if no
+     * results or if the network/search fails.
      */
-    suspend fun findFor(query: String, blocklist: Set<String> = emptySet()): SearchResult?
+    suspend fun findFor(
+        query: String,
+        blocklist: Set<String> = emptySet(),
+        maxResults: Int = 5,
+    ): List<SearchResult>
 
     /**
      * Extract a directly-playable audio stream URL for [videoId]. The URL is

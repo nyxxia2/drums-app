@@ -15,7 +15,11 @@ class NewPipeYouTubeSearchService(
     private val initialized: Boolean = ensureInit(),
 ) : YouTubeSearchService {
 
-    override suspend fun findFor(query: String, blocklist: Set<String>): SearchResult? =
+    override suspend fun findFor(
+        query: String,
+        blocklist: Set<String>,
+        maxResults: Int,
+    ): List<SearchResult> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val service = ServiceList.YouTube
@@ -43,31 +47,76 @@ class NewPipeYouTubeSearchService(
                             thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "",
                         )
                     }
-                    // Sort: prefer user uploads (more likely to allow embedding) over
-                    // VEVO / Topic / Official channels which routinely block embeds.
-                    .sortedBy { embedRestrictionScore(it.channelTitle) }
+                    .sortedBy { rankScore(it.title, it.channelTitle) }
+                    .take(maxResults)
                     .toList()
                     .also { ranked ->
-                        Log.d(TAG, "after filtering blocklist=${blocklist.size}, ranked ${ranked.size} results; top channel='${ranked.firstOrNull()?.channelTitle}'")
+                        Log.d(TAG, "after filtering blocklist=${blocklist.size}, took top ${ranked.size}; first='${ranked.firstOrNull()?.title}' channel='${ranked.firstOrNull()?.channelTitle}'")
                     }
-                    .firstOrNull()
-            }.getOrNull()
+            }.getOrNull() ?: emptyList()
         }
 
-    /**
-     * Heuristic: lower score = more likely to allow embedding.
-     * Vevo and YouTube Music Topic channels almost always block embeds;
-     * "Official" channels are usually owned by labels and block embeds too.
-     * User uploads / covers / lyric video channels get score 0.
-     */
-    private fun embedRestrictionScore(channel: String): Int {
-        val c = channel.lowercase()
-        return when {
-            c.endsWith("vevo") -> 100
-            c.endsWith(" - topic") -> 100
-            c.contains("official") -> 80
-            c.contains("records") -> 60   // record labels usually restrict
-            else -> 0
+    companion object {
+        @Volatile private var inited = false
+
+        private fun ensureInit(): Boolean {
+            synchronized(this) {
+                if (!inited) {
+                    NewPipe.init(NewPipeDownloader(), Localization.DEFAULT)
+                    inited = true
+                }
+            }
+            return true
+        }
+
+        /**
+         * Combined ranking score: lower = better. Content-mismatch dominates so a VEVO/Topic
+         * upload of the real song beats a user-uploaded karaoke version.
+         */
+        fun rankScore(title: String, channel: String): Int =
+            contentMismatchScore(title, channel) + embedRestrictionScore(channel)
+
+        /**
+         * Penalize uploads whose content doesn't match what the user wants. For a drumming app,
+         * karaoke and drumless tracks are useless (no drum audio), so they're effectively banned.
+         * Covers/instrumentals are wrong but at least playable. Lyric videos often have the
+         * original audio, so only a small penalty.
+         */
+        fun contentMismatchScore(title: String, channel: String): Int {
+            val t = title.lowercase()
+            val c = channel.lowercase()
+            val both = "$t $c"
+            var score = 0
+            if ("karaoke" in both) score += 300
+            // Drumless detection: explicit "drumless", "no drums", or any "drum(s)" + "minus"
+            // combo (covers channels like "Drum Minus Tracks" and titles like "drums minus").
+            val hasDrumsAndMinus = Regex("\\bdrums?\\b").containsMatchIn(both) &&
+                Regex("\\bminus\\b").containsMatchIn(both)
+            if ("drumless" in both ||
+                Regex("\\bno drums?\\b").containsMatchIn(t) ||
+                hasDrumsAndMinus
+            ) score += 300
+            if ("backing track" in both || "minus one" in t) score += 200
+            if ("instrumental" in both) score += 200
+            if (Regex("\\bcover(ed)?\\b").containsMatchIn(both)) score += 150
+            if ("lyric video" in t || Regex("\\blyrics?\\b").containsMatchIn(t)) score += 50
+            return score
+        }
+
+        /**
+         * Heuristic: lower score = more likely to allow embedding. Vevo and YouTube Music Topic
+         * channels almost always block embeds; "Official" / record-label channels usually restrict
+         * embedding too. User uploads / covers / lyric video channels get score 0.
+         */
+        fun embedRestrictionScore(channel: String): Int {
+            val c = channel.lowercase()
+            return when {
+                c.endsWith("vevo") -> 100
+                c.endsWith(" - topic") -> 100
+                c.contains("official") -> 80
+                c.contains("records") -> 60
+                else -> 0
+            }
         }
     }
 
@@ -118,19 +167,5 @@ class NewPipeYouTubeSearchService(
         if (direct != null) return direct
         val short = Regex("""youtu\.be/([A-Za-z0-9_-]{11})""").find(url)?.groupValues?.getOrNull(1)
         return short
-    }
-
-    companion object {
-        @Volatile private var inited = false
-
-        private fun ensureInit(): Boolean {
-            synchronized(this) {
-                if (!inited) {
-                    NewPipe.init(NewPipeDownloader(), Localization.DEFAULT)
-                    inited = true
-                }
-            }
-            return true
-        }
     }
 }

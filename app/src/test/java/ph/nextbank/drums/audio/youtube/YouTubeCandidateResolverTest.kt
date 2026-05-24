@@ -2,7 +2,7 @@ package ph.nextbank.drums.audio.youtube
 
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import ph.nextbank.drums.audio.songsterr.VideoPointEntry
 
@@ -17,7 +17,7 @@ class YouTubeCandidateResolverTest {
     )
 
     @Test
-    fun `synced - first entry meta resolves - returns it`() = runTest {
+    fun `synced - first entry meta resolves - returns it first`() = runTest {
         val search = FakeYouTubeSearchService().apply {
             metaResults = mapOf("aaaa1111111" to meta("aaaa1111111"))
         }
@@ -26,14 +26,13 @@ class YouTubeCandidateResolverTest {
 
         val out = resolver.resolveInitial("T", "A", entries, blocklist = emptySet())
 
-        assertEquals("aaaa1111111", out?.videoId)
+        assertEquals(listOf("aaaa1111111"), out.map { it.videoId })
     }
 
     @Test
     fun `synced - first entry meta null - falls through to second`() = runTest {
         val search = FakeYouTubeSearchService().apply {
             metaResults = mapOf("bbbb2222222" to meta("bbbb2222222"))
-            // "aaaa1111111" intentionally missing => fetchMeta returns null
         }
         val resolver = YouTubeCandidateResolver(search)
         val entries = listOf(
@@ -43,12 +42,35 @@ class YouTubeCandidateResolverTest {
 
         val out = resolver.resolveInitial("T", "A", entries, blocklist = emptySet())
 
-        assertEquals("bbbb2222222", out?.videoId)
+        assertEquals(listOf("bbbb2222222"), out.map { it.videoId })
     }
 
     @Test
-    fun `synced - all metas null - returns null`() = runTest {
-        val search = FakeYouTubeSearchService()  // metaResults empty
+    fun `synced - multiple metas resolve - returns them in order up to maxResults`() = runTest {
+        val search = FakeYouTubeSearchService().apply {
+            metaResults = mapOf(
+                "aaaa1111111" to meta("aaaa1111111"),
+                "bbbb2222222" to meta("bbbb2222222"),
+                "cccc3333333" to meta("cccc3333333"),
+            )
+        }
+        val resolver = YouTubeCandidateResolver(search)
+        val entries = listOf(
+            VideoPointEntry("aaaa1111111", listOf(0.0), null),
+            VideoPointEntry("bbbb2222222", listOf(0.0), null),
+            VideoPointEntry("cccc3333333", listOf(0.0), null),
+        )
+
+        val out = resolver.resolveInitial("T", "A", entries, blocklist = emptySet(), maxResults = 2)
+
+        assertEquals(listOf("aaaa1111111", "bbbb2222222"), out.map { it.videoId })
+    }
+
+    @Test
+    fun `synced - all metas null - falls through to findFor`() = runTest {
+        val search = FakeYouTubeSearchService().apply {
+            queue = listOf(meta("fallback111"))
+        }
         val resolver = YouTubeCandidateResolver(search)
         val entries = listOf(
             VideoPointEntry("aaaa1111111", listOf(0.0), null),
@@ -57,7 +79,9 @@ class YouTubeCandidateResolverTest {
 
         val out = resolver.resolveInitial("T", "A", entries, blocklist = emptySet())
 
-        assertNull(out)
+        // Synced fetchMeta returns null for both → fall through to general search.
+        assertEquals(listOf("fallback111"), out.map { it.videoId })
+        assertEquals("T A", search.lastQuery)
     }
 
     @Test
@@ -76,7 +100,33 @@ class YouTubeCandidateResolverTest {
 
         val out = resolver.resolveInitial("T", "A", entries, blocklist = setOf("aaaa1111111"))
 
-        assertEquals("bbbb2222222", out?.videoId)
+        assertEquals(listOf("bbbb2222222"), out.map { it.videoId })
+    }
+
+    @Test
+    fun `synced - all blocklisted - falls through to findFor with blocklist`() = runTest {
+        val search = FakeYouTubeSearchService().apply {
+            metaResults = mapOf(
+                "aaaa1111111" to meta("aaaa1111111"),
+                "bbbb2222222" to meta("bbbb2222222"),
+            )
+            queue = listOf(meta("fallback111"))
+        }
+        val resolver = YouTubeCandidateResolver(search)
+        val entries = listOf(
+            VideoPointEntry("aaaa1111111", listOf(0.0), null),
+            VideoPointEntry("bbbb2222222", listOf(0.0), null),
+        )
+
+        val out = resolver.resolveInitial(
+            "T",
+            "A",
+            entries,
+            blocklist = setOf("aaaa1111111", "bbbb2222222"),
+        )
+
+        assertEquals(listOf("fallback111"), out.map { it.videoId })
+        assertEquals(setOf("aaaa1111111", "bbbb2222222"), search.lastBlocklist)
     }
 
     @Test
@@ -88,7 +138,7 @@ class YouTubeCandidateResolverTest {
 
         val out = resolver.resolveInitial("Song", "Artist", videoPoints = null, blocklist = emptySet())
 
-        assertEquals("xxxx9999999", out?.videoId)
+        assertEquals(listOf("xxxx9999999"), out.map { it.videoId })
         assertEquals("Song Artist", search.lastQuery)
     }
 
@@ -101,18 +151,18 @@ class YouTubeCandidateResolverTest {
 
         val out = resolver.resolveInitial("S", "A", videoPoints = emptyList(), blocklist = emptySet())
 
-        assertEquals("yyyy8888888", out?.videoId)
+        assertEquals(listOf("yyyy8888888"), out.map { it.videoId })
         assertEquals(1, search.findForCalls)
     }
 
     @Test
-    fun `unsynced - search returns null - resolver returns null`() = runTest {
+    fun `unsynced - search returns empty - resolver returns empty`() = runTest {
         val search = FakeYouTubeSearchService().apply { shouldReturnNull = true }
         val resolver = YouTubeCandidateResolver(search)
 
         val out = resolver.resolveInitial("S", "A", videoPoints = null, blocklist = emptySet())
 
-        assertNull(out)
+        assertTrue(out.isEmpty())
     }
 
     @Test

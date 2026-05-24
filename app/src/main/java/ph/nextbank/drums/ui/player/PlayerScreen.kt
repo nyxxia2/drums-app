@@ -121,9 +121,9 @@ fun PlayerScreen(
         val phase = state.phase
         if (phase is PlayerPhase.Confirming) {
             YouTubeConfirmDialog(
-                candidate = phase.candidate,
-                onUseThis = { vm.acceptCandidate() },
-                onTryAnother = { vm.tryAnotherVideo() },
+                candidates = phase.candidates,
+                onPick = { vm.acceptCandidate(it) },
+                onNoneOfThese = { vm.dismissConfirmation() },
                 onDismiss = { vm.dismissConfirmation() },
             )
         }

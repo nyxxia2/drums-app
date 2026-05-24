@@ -23,13 +23,17 @@ class FakeYouTubeSearchService : YouTubeSearchService {
 
     var findForCalls: Int = 0
 
-    override suspend fun findFor(query: String, blocklist: Set<String>): SearchResult? {
+    override suspend fun findFor(
+        query: String,
+        blocklist: Set<String>,
+        maxResults: Int,
+    ): List<SearchResult> {
         throwOnCall?.let { throw it }
         findForCalls++
         lastQuery = query
         lastBlocklist = blocklist
-        if (shouldReturnNull) return null
-        return queue.firstOrNull { it.videoId !in blocklist }
+        if (shouldReturnNull) return emptyList()
+        return queue.filter { it.videoId !in blocklist }.take(maxResults)
     }
 
     override suspend fun getAudioStreamUrl(videoId: String): String? =

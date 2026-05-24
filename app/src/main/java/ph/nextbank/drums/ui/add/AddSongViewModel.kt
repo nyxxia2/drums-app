@@ -33,7 +33,7 @@ private const val SEARCH_DEBOUNCE_MS = 400L
 
 data class PendingConfirm(
     val songTemplate: Song,
-    val candidate: SearchResult,
+    val candidates: List<SearchResult>,
 )
 
 data class AddSongUiState(
@@ -101,11 +101,11 @@ class AddSongViewModel @Inject constructor(
         }
     }
 
-    fun confirmPendingAdd() {
+    fun confirmPendingAdd(candidate: SearchResult) {
         val pending = _state.value.pendingConfirm ?: return
         // Clear pendingConfirm synchronously so a subsequent dismiss can't race with the upsert.
         _state.value = _state.value.copy(pendingConfirm = null)
-        val song = pending.songTemplate.copy(youtubeVideoId = pending.candidate.videoId)
+        val song = pending.songTemplate.copy(youtubeVideoId = candidate.videoId)
         viewModelScope.launch {
             repo.upsertAll(listOf(song))
             _state.value = _state.value.copy(isAdding = false)
@@ -158,13 +158,13 @@ class AddSongViewModel @Inject constructor(
         points: List<VideoPointEntry>,
     ) {
         val videoPoints = points.takeIf { it.isNotEmpty() }
-        val candidate = resolver.resolveInitial(
+        val candidates = resolver.resolveInitial(
             title = result.title,
             artist = result.artist,
             videoPoints = videoPoints,
             blocklist = emptySet(),
         )
-        if (candidate == null) {
+        if (candidates.isEmpty()) {
             _events.tryEmit(AddSongEvent.Toast("Couldn't find a YouTube match — try a different result"))
             _state.value = _state.value.copy(isAdding = false)
             return
@@ -186,7 +186,7 @@ class AddSongViewModel @Inject constructor(
             videoPoints = videoPoints,
         )
         _state.value = _state.value.copy(
-            pendingConfirm = PendingConfirm(songTemplate, candidate),
+            pendingConfirm = PendingConfirm(songTemplate, candidates),
             // isAdding stays true so the search list stays disabled while the dialog is up
         )
     }

@@ -139,9 +139,9 @@ fun AddSongScreen(
         val pending = state.pendingConfirm
         if (pending != null) {
             YouTubeConfirmDialog(
-                candidate = pending.candidate,
-                onUseThis = vm::confirmPendingAdd,
-                onTryAnother = vm::dismissPendingAdd,  // no cycling at add time — same as dismiss
+                candidates = pending.candidates,
+                onPick = vm::confirmPendingAdd,
+                onNoneOfThese = vm::dismissPendingAdd,
                 onDismiss = vm::dismissPendingAdd,
             )
         } else if (state.isAdding) {
