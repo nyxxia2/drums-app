@@ -18,6 +18,8 @@ import ph.nextbank.drums.audio.songsterr.ParseResult
 import ph.nextbank.drums.audio.songsterr.SongsterrResult
 import ph.nextbank.drums.audio.songsterr.SongsterrSearchService
 import ph.nextbank.drums.audio.songsterr.SongsterrTabFetcher
+import ph.nextbank.drums.audio.songsterr.SongsterrVideoPointsService
+import ph.nextbank.drums.audio.songsterr.VideoPointEntry
 import ph.nextbank.drums.data.model.ImportSource
 import ph.nextbank.drums.data.model.Song
 import ph.nextbank.drums.data.repo.SongRepository
@@ -43,6 +45,7 @@ class AddSongViewModel @Inject constructor(
     private val searchService: SongsterrSearchService,
     private val tabFetcher: SongsterrTabFetcher,
     private val parser: DrumTabParser,
+    private val pointsService: SongsterrVideoPointsService,
     private val repo: SongRepository,
 ) : ViewModel() {
 
@@ -75,7 +78,11 @@ class AddSongViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching {
                 val fetched = tabFetcher.fetchDrumTrack(result.songId)
-                handleFetchResult(result, fetched)
+                val points = when (fetched) {
+                    is FetchResult.Success -> pointsService.fetch(result.songId, fetched.data.revisionId)
+                    else -> emptyList()
+                }
+                handleFetchResult(result, fetched, points)
             }.getOrElse {
                 _events.tryEmit(AddSongEvent.Toast("Couldn't load tab — try a different result"))
             }
@@ -83,11 +90,15 @@ class AddSongViewModel @Inject constructor(
         }
     }
 
-    private suspend fun handleFetchResult(result: SongsterrResult, fetched: FetchResult) {
+    private suspend fun handleFetchResult(
+        result: SongsterrResult,
+        fetched: FetchResult,
+        points: List<VideoPointEntry>,
+    ) {
         when (fetched) {
             is FetchResult.Success -> {
                 when (val parsed = parser.parse(fetched.data)) {
-                    is ParseResult.Success -> persistSong(result, fetched.data.revisionId, parsed)
+                    is ParseResult.Success -> persistSong(result, fetched.data.revisionId, parsed, points)
                     is ParseResult.NoDrumTrack ->
                         _events.tryEmit(AddSongEvent.Toast("This song doesn't have a drum tab on Songsterr."))
                     is ParseResult.ParseError ->
@@ -107,6 +118,7 @@ class AddSongViewModel @Inject constructor(
         result: SongsterrResult,
         revisionId: Long,
         parsed: ParseResult.Success,
+        points: List<VideoPointEntry>,
     ) {
         val coverInitials = (result.artist.take(1) + result.title.take(1)).uppercase().ifEmpty { "??" }
         val song = Song(
@@ -122,6 +134,7 @@ class AddSongViewModel @Inject constructor(
             youtubeVideoId = null,
             songsterrId = result.songId,
             songsterrRevisionId = revisionId.toString(),
+            videoPoints = points.takeIf { it.isNotEmpty() },
         )
         repo.upsertAll(listOf(song))
         _events.tryEmit(AddSongEvent.SongAdded(song.id))

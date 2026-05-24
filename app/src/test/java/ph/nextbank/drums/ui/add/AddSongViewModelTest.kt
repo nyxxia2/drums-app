@@ -16,11 +16,13 @@ import org.junit.Test
 import ph.nextbank.drums.audio.songsterr.DrumTabParser
 import ph.nextbank.drums.audio.songsterr.FakeSongsterrSearchService
 import ph.nextbank.drums.audio.songsterr.FakeSongsterrTabFetcher
+import ph.nextbank.drums.audio.songsterr.FakeSongsterrVideoPointsService
 import ph.nextbank.drums.audio.songsterr.FetchResult
 import ph.nextbank.drums.audio.songsterr.ParseResult
 import ph.nextbank.drums.audio.songsterr.RevisionJson
 import ph.nextbank.drums.audio.songsterr.SongsterrResult
 import ph.nextbank.drums.audio.songsterr.SongsterrTrack
+import ph.nextbank.drums.audio.songsterr.VideoPointEntry
 import ph.nextbank.drums.data.model.DrumToken
 import ph.nextbank.drums.data.repo.FakeSongRepository
 
@@ -52,6 +54,7 @@ class AddSongViewModelTest {
         searchResults: List<SongsterrResult> = listOf(sampleResult),
         fetchResult: FetchResult = FetchResult.Success(RevisionJson(50420, 1, "drums_X", buildJsonObject {})),
         parseResult: ParseResult = successResult,
+        pointsService: FakeSongsterrVideoPointsService = FakeSongsterrVideoPointsService(),
     ): Triple<AddSongViewModel, FakeSongRepository, FakeSongsterrTabFetcher> {
         val repo = FakeSongRepository()
         val fetcher = FakeSongsterrTabFetcher().apply { result = fetchResult }
@@ -59,7 +62,7 @@ class AddSongViewModelTest {
         val parser = object : DrumTabParser {
             override fun parse(revision: RevisionJson): ParseResult = parseResult
         }
-        val vm = AddSongViewModel(search, fetcher, parser, repo)
+        val vm = AddSongViewModel(search, fetcher, parser, pointsService, repo)
         return Triple(vm, repo, fetcher)
     }
 
@@ -112,5 +115,41 @@ class AddSongViewModelTest {
         assertTrue(repo.allSnapshot().isEmpty())
         val ev = vm.events.replayCache.firstOrNull() ?: vm.events.first()
         assertTrue(ev is AddSongEvent.Toast)
+    }
+
+    @Test fun `synced add persists videoPoints on the new song`() = runTest {
+        val sampleEntries = listOf(
+            VideoPointEntry(
+                youtubeVideoId = "abc12345678",
+                points = listOf(0.0, 2.0, 4.0),
+                feature = "alternative",
+            ),
+            VideoPointEntry(
+                youtubeVideoId = "def12345678",
+                points = listOf(1.0, 3.0, 5.0),
+                feature = null,
+            ),
+        )
+        val fakePoints = FakeSongsterrVideoPointsService(sampleEntries)
+        val (vm, repo, _) = mkVm(pointsService = fakePoints)
+
+        vm.onResultClicked(sampleResult)
+        advanceUntilIdle()
+
+        val saved = repo.allSnapshot().first()
+        assertEquals(2, saved.videoPoints?.size)
+        assertEquals("abc12345678", saved.videoPoints!![0].youtubeVideoId)
+        assertEquals(50420L, fakePoints.lastSongId)
+    }
+
+    @Test fun `unsynced add persists null videoPoints`() = runTest {
+        val fakePoints = FakeSongsterrVideoPointsService(emptyList())
+        val (vm, repo, _) = mkVm(pointsService = fakePoints)
+
+        vm.onResultClicked(sampleResult)
+        advanceUntilIdle()
+
+        val saved = repo.allSnapshot().first()
+        assertEquals(null, saved.videoPoints)
     }
 }
