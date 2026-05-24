@@ -133,9 +133,8 @@ class PlayerViewModel @Inject constructor(
                 switchToSynth()
                 return
             }
-            // Blocklist the failed videoId so re-opening the song skips it.
-            // Do NOT clear youtubeVideoId — the user's prior choice should survive a transient
-            // NewPipe extraction failure. If this song had no prior cache, there's nothing to keep.
+            // Blocklist the failed videoId. Do NOT clear youtubeVideoId — the user's prior
+            // choice should survive a transient NewPipe extraction failure.
             val failedBlocklist = (_state.value.song?.youtubeBlocklist.orEmpty() + videoId).distinct()
             repo.updateYoutubeBlocklist(songId, failedBlocklist)
             _state.value = _state.value.copy(
