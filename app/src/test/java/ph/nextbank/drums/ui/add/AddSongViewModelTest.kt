@@ -10,6 +10,8 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.serialization.json.buildJsonObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -23,6 +25,9 @@ import ph.nextbank.drums.audio.songsterr.RevisionJson
 import ph.nextbank.drums.audio.songsterr.SongsterrResult
 import ph.nextbank.drums.audio.songsterr.SongsterrTrack
 import ph.nextbank.drums.audio.songsterr.VideoPointEntry
+import ph.nextbank.drums.audio.youtube.FakeYouTubeSearchService
+import ph.nextbank.drums.audio.youtube.SearchResult
+import ph.nextbank.drums.audio.youtube.YouTubeCandidateResolver
 import ph.nextbank.drums.data.model.DrumToken
 import ph.nextbank.drums.data.repo.FakeSongRepository
 
@@ -55,27 +60,46 @@ class AddSongViewModelTest {
         fetchResult: FetchResult = FetchResult.Success(RevisionJson(50420, 1, "drums_X", buildJsonObject {})),
         parseResult: ParseResult = successResult,
         pointsService: FakeSongsterrVideoPointsService = FakeSongsterrVideoPointsService(),
-    ): Triple<AddSongViewModel, FakeSongRepository, FakeSongsterrTabFetcher> {
+        youtubeSearch: FakeYouTubeSearchService = FakeYouTubeSearchService().apply {
+            queue = listOf(
+                SearchResult(
+                    videoId = "yt00aaaaaaa",
+                    title = "Default match",
+                    channelTitle = "Default channel",
+                    durationSec = 200,
+                    thumbnailUrl = "thumb",
+                ),
+            )
+        },
+    ): Quad<AddSongViewModel, FakeSongRepository, FakeSongsterrTabFetcher, FakeYouTubeSearchService> {
         val repo = FakeSongRepository()
         val fetcher = FakeSongsterrTabFetcher().apply { result = fetchResult }
         val search = FakeSongsterrSearchService().apply { results = searchResults }
         val parser = object : DrumTabParser {
             override fun parse(revision: RevisionJson): ParseResult = parseResult
         }
-        val vm = AddSongViewModel(search, fetcher, parser, pointsService, repo)
-        return Triple(vm, repo, fetcher)
+        val resolver = YouTubeCandidateResolver(youtubeSearch)
+        val vm = AddSongViewModel(search, fetcher, parser, pointsService, resolver, repo)
+        return Quad(vm, repo, fetcher, youtubeSearch)
     }
 
     @Test fun `debounced search populates results`() = runTest {
-        val (vm, _, _) = mkVm()
+        val (vm, _, _, _) = mkVm()
         vm.onQueryChanged("in the air")
         advanceUntilIdle()
         assertEquals(1, vm.state.first().results.size)
     }
 
-    @Test fun `clicking a result persists a Song with parsed bars`() = runTest {
-        val (vm, repo, fetcher) = mkVm()
+    @Test fun `clicking a result then confirming persists a Song with parsed bars`() = runTest {
+        val (vm, repo, fetcher, _) = mkVm()
         vm.onResultClicked(sampleResult)
+        advanceUntilIdle()
+        // Resolver picked the default search hit; song should be pending, not yet persisted.
+        assertTrue(repo.allSnapshot().isEmpty())
+        val pending = vm.state.first().pendingConfirm
+        assertNotNull(pending)
+        assertEquals("yt00aaaaaaa", pending!!.candidate.videoId)
+        vm.confirmPendingAdd()
         advanceUntilIdle()
         assertEquals(50420L, fetcher.lastSongId)
         val snap = repo.allSnapshot()
@@ -85,10 +109,11 @@ class AddSongViewModelTest {
         assertEquals(95, saved.bpm)
         assertEquals(1, saved.bars.size)
         assertEquals(DrumToken.KICK, saved.bars[0][0].first())
+        assertEquals("yt00aaaaaaa", saved.youtubeVideoId)
     }
 
     @Test fun `NoDrumTrack from fetcher does not persist a song`() = runTest {
-        val (vm, repo, _) = mkVm(fetchResult = FetchResult.NoDrumTrack)
+        val (vm, repo, _, _) = mkVm(fetchResult = FetchResult.NoDrumTrack)
         vm.onResultClicked(sampleResult)
         advanceUntilIdle()
         assertTrue(repo.allSnapshot().isEmpty())
@@ -99,7 +124,7 @@ class AddSongViewModelTest {
     }
 
     @Test fun `NetworkError from fetcher surfaces a connection toast`() = runTest {
-        val (vm, repo, _) = mkVm(fetchResult = FetchResult.NetworkError)
+        val (vm, repo, _, _) = mkVm(fetchResult = FetchResult.NetworkError)
         vm.onResultClicked(sampleResult)
         advanceUntilIdle()
         assertTrue(repo.allSnapshot().isEmpty())
@@ -109,7 +134,7 @@ class AddSongViewModelTest {
     }
 
     @Test fun `ParseError surfaces a generic parse toast`() = runTest {
-        val (vm, repo, _) = mkVm(parseResult = ParseResult.ParseError("bad shape"))
+        val (vm, repo, _, _) = mkVm(parseResult = ParseResult.ParseError("bad shape"))
         vm.onResultClicked(sampleResult)
         advanceUntilIdle()
         assertTrue(repo.allSnapshot().isEmpty())
@@ -117,39 +142,102 @@ class AddSongViewModelTest {
         assertTrue(ev is AddSongEvent.Toast)
     }
 
-    @Test fun `synced add persists videoPoints on the new song`() = runTest {
+    @Test fun `synced add persists videoPoints and uses first entry's video id`() = runTest {
         val sampleEntries = listOf(
-            VideoPointEntry(
-                youtubeVideoId = "abc12345678",
-                points = listOf(0.0, 2.0, 4.0),
-                feature = "alternative",
-            ),
-            VideoPointEntry(
-                youtubeVideoId = "def12345678",
-                points = listOf(1.0, 3.0, 5.0),
-                feature = null,
-            ),
+            VideoPointEntry("abc12345678", listOf(0.0, 2.0, 4.0), "alternative"),
+            VideoPointEntry("def12345678", listOf(1.0, 3.0, 5.0), null),
         )
         val fakePoints = FakeSongsterrVideoPointsService(sampleEntries)
-        val (vm, repo, _) = mkVm(pointsService = fakePoints)
+        val youtubeSearch = FakeYouTubeSearchService().apply {
+            metaResults = mapOf(
+                "abc12345678" to SearchResult("abc12345678", "Synced 1", "C", 200, "t"),
+            )
+        }
+        val (vm, repo, _, _) = mkVm(pointsService = fakePoints, youtubeSearch = youtubeSearch)
 
         vm.onResultClicked(sampleResult)
+        advanceUntilIdle()
+        vm.confirmPendingAdd()
         advanceUntilIdle()
 
         val saved = repo.allSnapshot().first()
         assertEquals(2, saved.videoPoints?.size)
         assertEquals("abc12345678", saved.videoPoints!![0].youtubeVideoId)
+        assertEquals("abc12345678", saved.youtubeVideoId)
         assertEquals(50420L, fakePoints.lastSongId)
     }
 
     @Test fun `unsynced add persists null videoPoints`() = runTest {
         val fakePoints = FakeSongsterrVideoPointsService(emptyList())
-        val (vm, repo, _) = mkVm(pointsService = fakePoints)
+        val (vm, repo, _, _) = mkVm(pointsService = fakePoints)
 
         vm.onResultClicked(sampleResult)
+        advanceUntilIdle()
+        vm.confirmPendingAdd()
         advanceUntilIdle()
 
         val saved = repo.allSnapshot().first()
         assertEquals(null, saved.videoPoints)
     }
+
+    @Test fun `successful add surfaces pendingConfirm with isAdding still true`() = runTest {
+        val (vm, repo, _, _) = mkVm()
+        vm.onResultClicked(sampleResult)
+        advanceUntilIdle()
+
+        val s = vm.state.first()
+        assertTrue(s.isAdding)
+        assertNotNull(s.pendingConfirm)
+        assertEquals("yt00aaaaaaa", s.pendingConfirm!!.candidate.videoId)
+        assertTrue(repo.allSnapshot().isEmpty())
+    }
+
+    @Test fun `dismissPendingAdd clears state without persisting`() = runTest {
+        val (vm, repo, _, _) = mkVm()
+        vm.onResultClicked(sampleResult)
+        advanceUntilIdle()
+        assertNotNull(vm.state.first().pendingConfirm)
+
+        vm.dismissPendingAdd()
+        advanceUntilIdle()
+
+        val s = vm.state.first()
+        assertNull(s.pendingConfirm)
+        assertEquals(false, s.isAdding)
+        assertTrue(repo.allSnapshot().isEmpty())
+    }
+
+    @Test fun `resolver returning null toasts and does not persist`() = runTest {
+        val youtubeSearch = FakeYouTubeSearchService().apply { shouldReturnNull = true }
+        val (vm, repo, _, _) = mkVm(youtubeSearch = youtubeSearch)
+        vm.onResultClicked(sampleResult)
+        advanceUntilIdle()
+
+        val s = vm.state.first()
+        assertNull(s.pendingConfirm)
+        assertEquals(false, s.isAdding)
+        assertTrue(repo.allSnapshot().isEmpty())
+        val ev = vm.events.replayCache.firstOrNull() ?: vm.events.first()
+        assertTrue(ev is AddSongEvent.Toast)
+        assertTrue(
+            "toast: ${(ev as AddSongEvent.Toast).message}",
+            ev.message.contains("YouTube", ignoreCase = true),
+        )
+    }
+
+    @Test fun `confirmPendingAdd emits SongAdded with the new song id`() = runTest {
+        val (vm, repo, _, _) = mkVm()
+        vm.onResultClicked(sampleResult)
+        advanceUntilIdle()
+        vm.confirmPendingAdd()
+        advanceUntilIdle()
+
+        val savedId = repo.allSnapshot().first().id
+        val events = vm.events.replayCache
+        val added = events.filterIsInstance<AddSongEvent.SongAdded>().firstOrNull()
+        assertNotNull(added)
+        assertEquals(savedId, added!!.songId)
+    }
 }
+
+private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)

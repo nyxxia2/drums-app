@@ -20,6 +20,8 @@ import ph.nextbank.drums.audio.songsterr.SongsterrSearchService
 import ph.nextbank.drums.audio.songsterr.SongsterrTabFetcher
 import ph.nextbank.drums.audio.songsterr.SongsterrVideoPointsService
 import ph.nextbank.drums.audio.songsterr.VideoPointEntry
+import ph.nextbank.drums.audio.youtube.SearchResult
+import ph.nextbank.drums.audio.youtube.YouTubeCandidateResolver
 import ph.nextbank.drums.data.model.ImportSource
 import ph.nextbank.drums.data.model.Song
 import ph.nextbank.drums.data.repo.SongRepository
@@ -28,11 +30,17 @@ import javax.inject.Inject
 
 private const val SEARCH_DEBOUNCE_MS = 400L
 
+data class PendingConfirm(
+    val songTemplate: Song,
+    val candidate: SearchResult,
+)
+
 data class AddSongUiState(
     val query: String = "",
     val isSearching: Boolean = false,
     val isAdding: Boolean = false,
     val results: List<SongsterrResult> = emptyList(),
+    val pendingConfirm: PendingConfirm? = null,
 )
 
 sealed interface AddSongEvent {
@@ -46,6 +54,7 @@ class AddSongViewModel @Inject constructor(
     private val tabFetcher: SongsterrTabFetcher,
     private val parser: DrumTabParser,
     private val pointsService: SongsterrVideoPointsService,
+    private val resolver: YouTubeCandidateResolver,
     private val repo: SongRepository,
 ) : ViewModel() {
 
@@ -85,9 +94,23 @@ class AddSongViewModel @Inject constructor(
                 handleFetchResult(result, fetched, points)
             }.getOrElse {
                 _events.tryEmit(AddSongEvent.Toast("Couldn't load tab — try a different result"))
+                _state.value = _state.value.copy(isAdding = false)
             }
-            _state.value = _state.value.copy(isAdding = false)
         }
+    }
+
+    fun confirmPendingAdd() {
+        val pending = _state.value.pendingConfirm ?: return
+        val song = pending.songTemplate.copy(youtubeVideoId = pending.candidate.videoId)
+        viewModelScope.launch {
+            repo.upsertAll(listOf(song))
+            _state.value = _state.value.copy(pendingConfirm = null, isAdding = false)
+            _events.tryEmit(AddSongEvent.SongAdded(song.id))
+        }
+    }
+
+    fun dismissPendingAdd() {
+        _state.value = _state.value.copy(pendingConfirm = null, isAdding = false)
     }
 
     private suspend fun handleFetchResult(
@@ -98,30 +121,52 @@ class AddSongViewModel @Inject constructor(
         when (fetched) {
             is FetchResult.Success -> {
                 when (val parsed = parser.parse(fetched.data)) {
-                    is ParseResult.Success -> persistSong(result, fetched.data.revisionId, parsed, points)
-                    is ParseResult.NoDrumTrack ->
+                    is ParseResult.Success -> stagePendingAdd(result, fetched.data.revisionId, parsed, points)
+                    is ParseResult.NoDrumTrack -> {
                         _events.tryEmit(AddSongEvent.Toast("This song doesn't have a drum tab on Songsterr."))
-                    is ParseResult.ParseError ->
+                        _state.value = _state.value.copy(isAdding = false)
+                    }
+                    is ParseResult.ParseError -> {
                         _events.tryEmit(AddSongEvent.Toast("Couldn't read the tab data."))
+                        _state.value = _state.value.copy(isAdding = false)
+                    }
                 }
             }
-            FetchResult.NoDrumTrack ->
+            FetchResult.NoDrumTrack -> {
                 _events.tryEmit(AddSongEvent.Toast("This song doesn't have a drum tab on Songsterr."))
-            is FetchResult.ScrapeFailure ->
+                _state.value = _state.value.copy(isAdding = false)
+            }
+            is FetchResult.ScrapeFailure -> {
                 _events.tryEmit(AddSongEvent.Toast("Couldn't load tab from Songsterr — try a different result"))
-            FetchResult.NetworkError ->
+                _state.value = _state.value.copy(isAdding = false)
+            }
+            FetchResult.NetworkError -> {
                 _events.tryEmit(AddSongEvent.Toast("Check your connection."))
+                _state.value = _state.value.copy(isAdding = false)
+            }
         }
     }
 
-    private suspend fun persistSong(
+    private suspend fun stagePendingAdd(
         result: SongsterrResult,
         revisionId: Long,
         parsed: ParseResult.Success,
         points: List<VideoPointEntry>,
     ) {
+        val videoPoints = points.takeIf { it.isNotEmpty() }
+        val candidate = resolver.resolveInitial(
+            title = result.title,
+            artist = result.artist,
+            videoPoints = videoPoints,
+            blocklist = emptySet(),
+        )
+        if (candidate == null) {
+            _events.tryEmit(AddSongEvent.Toast("Couldn't find a YouTube match — try a different result"))
+            _state.value = _state.value.copy(isAdding = false)
+            return
+        }
         val coverInitials = (result.artist.take(1) + result.title.take(1)).uppercase().ifEmpty { "??" }
-        val song = Song(
+        val songTemplate = Song(
             id = UUID.randomUUID().toString(),
             title = result.title,
             artist = result.artist,
@@ -129,14 +174,16 @@ class AddSongViewModel @Inject constructor(
             timeSig = parsed.timeSig,
             bars = parsed.bars,
             coverInitials = coverInitials,
-            importedFrom = ImportSource.BUNDLED, // semantics: app-added; Phase 4 can introduce a SONGSTERR enum value if needed
+            importedFrom = ImportSource.BUNDLED,
             lastPlayed = null,
-            youtubeVideoId = null,
+            youtubeVideoId = null,  // filled in on confirm
             songsterrId = result.songId,
             songsterrRevisionId = revisionId.toString(),
-            videoPoints = points.takeIf { it.isNotEmpty() },
+            videoPoints = videoPoints,
         )
-        repo.upsertAll(listOf(song))
-        _events.tryEmit(AddSongEvent.SongAdded(song.id))
+        _state.value = _state.value.copy(
+            pendingConfirm = PendingConfirm(songTemplate, candidate),
+            // isAdding stays true so the search list stays disabled while the dialog is up
+        )
     }
 }
