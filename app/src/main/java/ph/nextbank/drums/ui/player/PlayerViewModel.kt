@@ -196,7 +196,16 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun tryAnotherVideo() = retry(autoAccept = false)
+    fun tryAnotherVideo() {
+        val song = _state.value.song
+        val syncedEntries = song?.videoPoints
+        if (song != null && !syncedEntries.isNullOrEmpty() && syncedCandidateIdx < syncedEntries.size) {
+            // Synced path: cycle to the next entry (or fall through if exhausted).
+            viewModelScope.launch { showSyncedCandidate(song, syncedCandidateIdx + 1) }
+        } else {
+            retry(autoAccept = false)
+        }
+    }
 
     /** Internal retry that can skip the confirmation dialog — used for auto-retry after a YouTube error. */
     private fun retry(autoAccept: Boolean) {

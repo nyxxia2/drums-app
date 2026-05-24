@@ -252,4 +252,50 @@ class PlayerViewModelTest {
         assertEquals("syncedAbc12", (phase as PlayerPhase.Confirming).candidate.videoId)
         assertEquals(0, search.findForCalls)  // legacy path NOT taken.
     }
+
+    @Test fun `tryAnotherVideo on synced song advances to next entry`() = runTest {
+        val entries = listOf(
+            VideoPointEntry("aaa11111111", listOf(0.0, 2.0), null),
+            VideoPointEntry("bbb22222222", listOf(0.0, 2.0), null),
+        )
+        val song = songWithoutVideo(id = "song2", videoPoints = entries)
+        val repo = FakeSongRepository().apply { seed(song) }
+        val search = FakeYouTubeSearchService().apply {
+            metaResults = mapOf(
+                "aaa11111111" to SearchResult("aaa11111111", "First", "Ch", 200, ""),
+                "bbb22222222" to SearchResult("bbb22222222", "Second", "Ch", 200, ""),
+            )
+        }
+        val vm = mkVm(repo, search, songId = "song2")
+        advanceUntilIdle()
+        // First candidate shown.
+        assertEquals("aaa11111111", (vm.state.value.phase as PlayerPhase.Confirming).candidate.videoId)
+
+        vm.tryAnotherVideo()
+        advanceUntilIdle()
+
+        assertEquals("bbb22222222", (vm.state.value.phase as PlayerPhase.Confirming).candidate.videoId)
+    }
+
+    @Test fun `exhausting synced entries falls through to YouTube search`() = runTest {
+        val entries = listOf(
+            VideoPointEntry("only11111111", listOf(0.0, 2.0), null),
+        )
+        val song = songWithoutVideo(id = "song3", videoPoints = entries)
+        val repo = FakeSongRepository().apply { seed(song) }
+        val search = FakeYouTubeSearchService().apply {
+            metaResults = mapOf(
+                "only11111111" to SearchResult("only11111111", "Only", "Ch", 200, ""),
+            )
+            queue = listOf(SearchResult("legacyXYZ12", "Legacy", "Ch", 200, ""))
+        }
+        val vm = mkVm(repo, search, songId = "song3")
+        advanceUntilIdle()
+
+        vm.tryAnotherVideo()  // exhausts the single entry → triggers runSearch
+        advanceUntilIdle()
+
+        assertTrue(search.findForCalls >= 1)
+        assertEquals("legacyXYZ12", (vm.state.value.phase as PlayerPhase.Confirming).candidate.videoId)
+    }
 }
