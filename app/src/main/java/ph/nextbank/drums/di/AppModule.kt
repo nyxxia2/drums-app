@@ -13,8 +13,10 @@ import ph.nextbank.drums.audio.songsterr.DefaultDrumTabParser
 import ph.nextbank.drums.audio.songsterr.DrumTabParser
 import ph.nextbank.drums.audio.songsterr.OkHttpSongsterrSearchService
 import ph.nextbank.drums.audio.songsterr.OkHttpSongsterrTabFetcher
+import ph.nextbank.drums.audio.songsterr.OkHttpSongsterrVideoPointsService
 import ph.nextbank.drums.audio.songsterr.SongsterrSearchService
 import ph.nextbank.drums.audio.songsterr.SongsterrTabFetcher
+import ph.nextbank.drums.audio.songsterr.SongsterrVideoPointsService
 import ph.nextbank.drums.audio.youtube.NewPipeYouTubeSearchService
 import ph.nextbank.drums.audio.youtube.YouTubeSearchService
 import ph.nextbank.drums.data.db.AppDatabase
@@ -55,6 +57,10 @@ object AppModule {
 
     @Provides @Singleton
     fun provideSongsterrTabFetcher(): SongsterrTabFetcher = OkHttpSongsterrTabFetcher()
+
+    @Provides @Singleton
+    fun provideSongsterrVideoPointsService(): SongsterrVideoPointsService =
+        OkHttpSongsterrVideoPointsService()
 
     @Provides @Singleton
     fun provideDrumTabParser(): DrumTabParser = DefaultDrumTabParser()
