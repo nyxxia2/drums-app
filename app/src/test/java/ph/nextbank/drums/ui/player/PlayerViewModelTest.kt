@@ -28,9 +28,18 @@ import ph.nextbank.drums.data.repo.FakeSongRepository
 private class FakeYouTubeAdapterFactory : YouTubeAdapterFactory {
     val createdAdapters = mutableListOf<FakeYouTubeAdapter>()
     val streamUrls = mutableListOf<String>()
+    /** Captured listener from the most-recently-created adapter (set when setListener is called). */
+    var lastListener: ph.nextbank.drums.audio.playback.YouTubeAdapterListener? = null
     override fun create(streamUrl: String): YouTubeAdapter {
         streamUrls += streamUrl
-        return FakeYouTubeAdapter().also { createdAdapters += it }
+        val adapter = object : FakeYouTubeAdapter() {
+            override fun setListener(listener: ph.nextbank.drums.audio.playback.YouTubeAdapterListener) {
+                super.setListener(listener)
+                lastListener = listener
+            }
+        }
+        createdAdapters += adapter
+        return adapter
     }
 }
 
@@ -48,13 +57,15 @@ class PlayerViewModelTest {
         id: String = "test1",
         blocklist: List<String> = emptyList(),
         videoPoints: List<VideoPointEntry>? = null,
+        bpm: Int = 120,
+        totalBars: Int = 1,
     ) = Song(
         id = id,
         title = "Test Song",
         artist = "Tester",
-        bpm = 120,
+        bpm = bpm,
         timeSig = 4 to 4,
-        bars = listOf(List(16) { emptyList<DrumToken>() }),
+        bars = List(totalBars) { List(16) { emptyList<DrumToken>() } },
         coverInitials = "TT",
         importedFrom = ImportSource.BUNDLED,
         lastPlayed = null,
@@ -297,5 +308,40 @@ class PlayerViewModelTest {
 
         assertTrue(search.findForCalls >= 1)
         assertEquals("legacyXYZ12", (vm.state.value.phase as PlayerPhase.Confirming).candidate.videoId)
+    }
+
+    @Test fun `accepting a synced candidate uses PointsBasedTimeMap`() = runTest {
+        val entries = listOf(
+            VideoPointEntry(
+                youtubeVideoId = "syncedV1234",
+                points = listOf(0.0, 2.0, 4.0, 6.0),  // 4 bars × 16 slots/bar = 64 totalSlots
+                feature = null,
+            ),
+        )
+        val song = songWithoutVideo(
+            id = "song4",
+            videoPoints = entries,
+            bpm = 60,   // intentionally wrong vs the points (would yield different slots if ConstantBpmTimeMap were used)
+            totalBars = 4,
+        )
+        val repo = FakeSongRepository().apply { seed(song) }
+        val search = FakeYouTubeSearchService().apply {
+            metaResults = mapOf(
+                "syncedV1234" to SearchResult("syncedV1234", "Synced", "Ch", 240, ""),
+            )
+            audioUrls = mapOf("syncedV1234" to "fake-stream-url")
+        }
+        val factory = FakeYouTubeAdapterFactory()
+        val vm = mkVm(repo, search, adapterFactory = factory, songId = "song4")
+        advanceUntilIdle()
+        vm.acceptCandidate()
+        advanceUntilIdle()
+
+        // Feed t=1.0 via the adapter listener.
+        // With points [0,2,4,6] and slotsPerBar=16, slot at t=1 should be 8.
+        // (If ConstantBpmTimeMap had been used: at 60 BPM × 4 slots/beat, t=1 → slot=4.)
+        factory.lastListener?.onCurrentSecond(1.0f)
+        advanceUntilIdle()
+        assertEquals(8, vm.state.value.activeSlotIndex)
     }
 }

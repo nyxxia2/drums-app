@@ -1,6 +1,6 @@
 package ph.nextbank.drums.audio.playback
 
-class FakeYouTubeAdapter : YouTubeAdapter {
+open class FakeYouTubeAdapter : YouTubeAdapter {
     private var _listener: YouTubeAdapterListener? = null
     val playCalls = mutableListOf<Unit>()
     val pauseCalls = mutableListOf<Unit>()
@@ -11,7 +11,7 @@ class FakeYouTubeAdapter : YouTubeAdapter {
     override fun pause() { pauseCalls.add(Unit) }
     override fun stop() { stopCalls.add(Unit) }
     override fun seekToSeconds(seconds: Float) { seekCalls.add(seconds) }
-    override fun setListener(listener: YouTubeAdapterListener) { _listener = listener }
+    open override fun setListener(listener: YouTubeAdapterListener) { _listener = listener }
 
     fun simulateReady() = _listener!!.onReady()
     fun simulatePlay() = _listener!!.onPlay()

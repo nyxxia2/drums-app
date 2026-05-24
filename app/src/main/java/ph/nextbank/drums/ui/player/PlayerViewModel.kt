@@ -168,11 +168,22 @@ class PlayerViewModel @Inject constructor(
         }
         val s = _state.value.song ?: return
         val adapter = adapterFactory.create(streamUrl)
-        val timeMap = ph.nextbank.drums.audio.ConstantBpmTimeMap(
-            bpm = s.bpm,
-            totalSlots = s.totalBars * s.slotsPerBar,
-            slotsPerBeat = s.slotsPerBar / s.timeSig.first,
-        )
+
+        val syncedEntry = s.videoPoints?.firstOrNull { it.youtubeVideoId == videoId }
+        val timeMap: ph.nextbank.drums.audio.TimeMap = if (syncedEntry != null) {
+            ph.nextbank.drums.audio.PointsBasedTimeMap(
+                points = syncedEntry.points,
+                slotsPerBar = s.slotsPerBar,
+                totalSlots = s.totalBars * s.slotsPerBar,
+            )
+        } else {
+            ph.nextbank.drums.audio.ConstantBpmTimeMap(
+                bpm = s.bpm,
+                totalSlots = s.totalBars * s.slotsPerBar,
+                slotsPerBeat = s.slotsPerBar / s.timeSig.first,
+            )
+        }
+
         val src = YouTubePlaybackSource(
             timeMap = timeMap,
             adapter = adapter,
